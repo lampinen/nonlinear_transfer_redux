@@ -1,0 +1,100 @@
+---
+title: "Transfer analyses"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(lme4)
+library(lmerTest)
+```
+
+# load data
+```{r}
+num_runs = 33
+num_layerss = 2:4
+```
+
+```{r}
+d = data.frame()
+for (run_i in 0:(num_runs-1)) {
+  for (num_layers in num_layerss) {
+    for (analogous in 0:1) {
+      for (nonlinear in 0:1) {
+        filename = sprintf("results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_loss_track.csv",
+                           num_layers, nonlinear, analogous, run_i)
+        this_d = read_csv(filename) %>%
+          mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:1, labels=c("non-analogous", "analogous")), num_layers=num_layers)
+        d = bind_rows(d, this_d)
+      }
+    }
+  }
+}
+```
+
+```{r}
+d = d %>%
+  #filter((num_layers==5 & epoch %% 500 == 0) | (num_layers==4 & epoch %% 200 == 0) | (num_layers == 3 & epoch %% 50 == 0) | num_layers == 2) %>%
+  complete(run, analogous, nesting(nonlinear, num_layers, epoch), fill=list(MSE=0)) 
+```
+
+
+# basic analysis
+```{r}
+theme_set(theme_bw() +
+          theme(panel.grid=element_blank()))
+```
+
+```{r}
+ggplot(data=d, aes(x=epoch, y=MSE, color=analogous)) +
+  geom_line(stat="summary", fun.y=median, size=1) +
+  geom_line(aes(group=interaction(run, analogous)), alpha=0.1) +
+  facet_wrap(.~nonlinear + num_layers, scales="free_x") +
+  labs(y="Loss (L2)") +
+  scale_color_brewer(palette="Set1")
+```
+
+```{r}
+ggsave("plots/basic_transfer_comparison.png", width=8, height=4)
+```
+
+```{r}
+learned_d = d %>%
+  filter(MSE < 0.05) %>%
+  group_by(nonlinear, analogous, num_layers, run) %>%
+  summarize(learned_epoch = min(epoch)) %>%
+  ungroup()
+```
+
+
+```{r}
+model = lmer(learned_epoch ~ analogous * nonlinear + (1 | run), learned_d %>% filter(num_layers==4))
+summary(model)
+```
+
+```{r}
+learned_diff_d = learned_d %>%
+  spread(analogous, learned_epoch) %>%
+  mutate(learn_diff = `non-analogous` - `analogous`)
+```
+
+```{r}
+ggplot(learned_d %>% filter(nonlinear, num_layers==4), aes(x=learned_epoch, color=analogous)) +
+  geom_line(stat="density") +
+  facet_grid(. ~ num_layers, scales="free")
+```
+```{r}
+ggsave("plots/basic_transfer_stopping_times.png", width=8, height=4)
+```
+
+
+```{r}
+ggplot(learned_diff_d %>% filter(nonlinear, num_layers==4), aes(x=learn_diff)) +
+  geom_line(stat="density") +
+  facet_grid(. ~ num_layers, scales="free") +
+  labs(x="Amount longer it took to learn non-analogous")
+```
+
+```{r}
+ggsave("plots/basic_transfer_stopping_time_differences.png", width=8, height=4)
+```
