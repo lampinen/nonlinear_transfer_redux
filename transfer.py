@@ -18,10 +18,7 @@ num_hidden = 6
 ###################################
 nonlinearity_function = tf.nn.relu
 
-y_data_asymm = np.zeros([4, num_outputs])
-y_data_asymm2 = np.zeros([4, num_outputs])
-
-y_data = np.array(
+sigma_31 = np.array(
     [[1, 1, 0, 0, 0, 0, 0, 0],
      [1, 0, 1, 0, 0, 0, 0, 0],
      [1, 0, 0, 1, 0, 0, 0, 0],
@@ -31,29 +28,50 @@ y_data = np.array(
 
 rt_3 = np.sqrt(3)
 rt_2 = np.sqrt(2)
-y_data_no = np.array(
+sigma_31_no = np.array(
     [[1, 1, 0, 0, 0, 0, 0, 0],
      [1, 0, 1, 0, 0, 0, 0, 0],
      [1, 0, 0, 1, 0, 0, 0, 0],
      [0, 0, 0, 0, 2, 0, 0, 0],
      [0, 0, 0, 0, 0, 1/rt_2, 1/rt_2, 0],
      [0, 0, 0, 0, 0, 0, 0, 1]])
-np.savetxt("no_analogy_data.csv", y_data_no, delimiter=',')
-np.savetxt("analogy_data.csv", y_data, delimiter=',')
+np.random.seed(0)
+_, S1, V1 = np.linalg.svd(sigma_31_no[:num_inputs//2, :num_outputs//2], full_matrices=False)
+_, S2, V2 = np.linalg.svd(sigma_31_no[num_inputs//2:, num_outputs//2:], full_matrices=False)
+U = block_diag(random_orthogonal(num_inputs//2), random_orthogonal(num_inputs//2)) 
+S = block_diag(np.diag(S1), np.diag(S2))
+V = block_diag(V1, V2)
+sigma_31_no = np.matmul(U, np.matmul(S, V))
+_, S, V = np.linalg.svd(sigma_31_no, full_matrices=False)
+print()
+print(sigma_31_no)
+print(S)
 
-U, S, V, = np.linalg.svd(y_data_no, full_matrices=False)
-print(y_data_no)
+_, S1, V1 = np.linalg.svd(sigma_31[:num_inputs//2, :num_outputs//2], full_matrices=False)
+struct = random_orthogonal(num_inputs//2)
+U = block_diag(struct, struct)
+S = block_diag(np.diag(S1), np.diag(S1))
+V = block_diag(V1, V1)
+sigma_31 = np.matmul(U, np.matmul(S, V))
+_, S, V = np.linalg.svd(sigma_31, full_matrices=False)
+print(sigma_31)
 print(S)
-U, S, V, = np.linalg.svd(y_data, full_matrices=False)
-print(y_data)
-print(S)
+x_struct = random_orthogonal(num_inputs//2)
+x_data = block_diag(x_struct, x_struct) 
+print(x_data)
+
+y_data = np.matmul(x_data.transpose(), sigma_31)
+y_data_no = np.matmul(x_data.transpose(), sigma_31_no)
 
 y_datasets = [y_data, y_data_no]
 
-for rseed in xrange(nruns):
-    np.random.seed(rseed)
+print(y_data)
+print(y_data_no)
+np.savetxt("no_analogy_data.csv", y_data_no, delimiter=',')
+np.savetxt("analogy_data.csv", y_data, delimiter=',')
 
-    x_data = np.eye(num_inputs)
+for rseed in xrange(nruns):
+
     for nonlinear in [True, False]:
         nonlinearity_function = tf.nn.leaky_relu
         for nlayer in [4, 3, 2]:

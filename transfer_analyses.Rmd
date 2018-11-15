@@ -11,7 +11,7 @@ library(lmerTest)
 
 # load data
 ```{r}
-num_runs = 33
+num_runs = 36
 num_layerss = 2:4
 ```
 
