@@ -15,7 +15,7 @@ nruns = 200
 run_offset = 0
 num_inputs = 6
 num_outputs = 8
-num_hidden = 6
+num_hidden = 20
 ###################################
 nonlinearity_function = tf.nn.relu
 
@@ -94,31 +94,31 @@ for rseed in xrange(run_offset, run_offset + nruns):
                 target_ph = tf.placeholder(tf.float32, shape=[None, num_outputs])
 
 
-                Win = tf.Variable(tf.random_uniform([num_hidden,num_inputs],0.,0.5/(num_hidden+num_inputs)))
-                bi = tf.Variable(tf.ones([num_hidden,]))
-                internal_rep = tf.matmul(Win, input_ph) + bi
+                Win = tf.Variable(tf.random_uniform([num_inputs,num_hidden],0.,0.5/(num_hidden+num_inputs)))
+                bi = tf.Variable(tf.zeros([num_hidden]))
+                internal_rep = tf.matmul(input_ph, Win) + bi
                 hidden_weights = []
                 if nonlinear:
                     internal_rep = nonlinearity_function(internal_rep)
 
                 for layer_i in range(1, nlayer-1):
                     W = tf.Variable(tf.random_normal([num_hidden,num_hidden],0.,0.5/num_hidden))
-                    b = tf.Variable(tf.ones([num_hidden,]))
-                    internal_rep = tf.matmul(W, internal_rep) + b
+                    b = tf.Variable(tf.zeros([num_hidden]))
+                    internal_rep = tf.matmul(internal_rep, W) + b
                     if nonlinear:
                         internal_rep = nonlinearity_function(internal_rep)
 
-                bo = tf.Variable(tf.ones([num_outputs,1]))
-                Wout = tf.Variable(tf.random_uniform([num_outputs,num_hidden],0.,0.5/(num_hidden+num_outputs)))
-                pre_output = tf.matmul(Wout, internal_rep) + bo
+                bo = tf.Variable(tf.zeros([num_outputs]))
+                Wout = tf.Variable(tf.random_uniform([num_hidden,num_outputs],0.,0.5/(num_hidden+num_outputs)))
+                pre_output = tf.matmul(internal_rep, Wout) + bo
 
                 if nonlinear:
                     output = nonlinearity_function(pre_output)
                 else:
                     output = pre_output
 
-                loss = tf.reduce_sum(tf.square(output - tf.transpose(target_ph)))# +0.05*(tf.nn.l2_loss(internal_rep))
-                d1_loss = tf.reduce_sum(tf.square(output[:4, :3] - tf.transpose(target_ph)[:4, :3]))
+                loss = tf.reduce_sum(tf.square(output - target_ph))# +0.05*(tf.nn.l2_loss(internal_rep))
+                d1_loss = tf.reduce_sum(tf.square(output[:3, :4] - target_ph[:3, :4]))
                 output_grad = tf.gradients(loss,[output])[0]
                 eta_ph = tf.placeholder(tf.float32)
                 optimizer = tf.train.GradientDescentOptimizer(eta_ph)
