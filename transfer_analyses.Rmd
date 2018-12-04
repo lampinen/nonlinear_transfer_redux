@@ -11,7 +11,7 @@ library(lmerTest)
 
 # load data
 ```{r}
-num_runs = 36
+num_runs = 100
 num_layerss = 2:4
 ```
 
@@ -34,8 +34,8 @@ for (run_i in 0:(num_runs-1)) {
 
 ```{r}
 d = d %>%
-  #filter((num_layers==5 & epoch %% 500 == 0) | (num_layers==4 & epoch %% 200 == 0) | (num_layers == 3 & epoch %% 50 == 0) | num_layers == 2) %>%
-  complete(run, analogous, nesting(nonlinear, num_layers, epoch), fill=list(MSE=0)) 
+  filter((num_layers==5 & epoch %% 500 == 0) | (num_layers==4 & epoch %% 200 == 0) | (num_layers == 3 & epoch %% 50 == 0) | num_layers == 2) %>%
+  complete(run, analogous, nesting(nonlinear, num_layers, epoch), fill=list(MSE=0, d1_MSE=0)) 
 ```
 
 
@@ -46,7 +46,7 @@ theme_set(theme_bw() +
 ```
 
 ```{r}
-ggplot(data=d, aes(x=epoch, y=MSE, color=analogous)) +
+ggplot(data=d, aes(x=epoch, y=d1_MSE, color=analogous)) +
   geom_line(stat="summary", fun.y=median, size=1) +
   geom_line(aes(group=interaction(run, analogous)), alpha=0.1) +
   facet_wrap(.~nonlinear + num_layers, scales="free_x") +
@@ -60,7 +60,7 @@ ggsave("plots/basic_transfer_comparison.png", width=8, height=4)
 
 ```{r}
 learned_d = d %>%
-  filter(MSE < 0.05) %>%
+  filter(d1_MSE < 0.05) %>%
   group_by(nonlinear, analogous, num_layers, run) %>%
   summarize(learned_epoch = min(epoch)) %>%
   ungroup()
