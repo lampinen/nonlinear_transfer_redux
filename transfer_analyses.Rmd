@@ -11,7 +11,7 @@ library(lmerTest)
 
 # load data
 ```{r}
-num_runs = 100
+num_runs = 200
 num_layerss = 2:4
 ```
 
@@ -68,7 +68,7 @@ learned_d = d %>%
 
 
 ```{r}
-model = lmer(learned_epoch ~ analogous * nonlinear + (1 | run), learned_d %>% filter(num_layers==4))
+model = lmer(learned_epoch ~ analogous  * nonlinear + (1 | run), learned_d %>% filter(num_layers==3))
 summary(model)
 ```
 
@@ -79,7 +79,7 @@ learned_diff_d = learned_d %>%
 ```
 
 ```{r}
-ggplot(learned_d %>% filter(nonlinear, num_layers==4), aes(x=learned_epoch, color=analogous)) +
+ggplot(learned_d %>% filter(nonlinear, num_layers==3), aes(x=learned_epoch, color=analogous)) +
   geom_line(stat="density") +
   facet_grid(. ~ num_layers, scales="free")
 ```
@@ -89,7 +89,7 @@ ggsave("plots/basic_transfer_stopping_times.png", width=8, height=4)
 
 
 ```{r}
-ggplot(learned_diff_d %>% filter(nonlinear, num_layers==4), aes(x=learn_diff)) +
+ggplot(learned_diff_d %>% filter(nonlinear, num_layers==3), aes(x=learn_diff)) +
   geom_line(stat="density") +
   facet_grid(. ~ num_layers, scales="free") +
   labs(x="Amount longer it took to learn non-analogous")
@@ -98,3 +98,40 @@ ggplot(learned_diff_d %>% filter(nonlinear, num_layers==4), aes(x=learn_diff)) +
 ```{r}
 ggsave("plots/basic_transfer_stopping_time_differences.png", width=8, height=4)
 ```
+
+
+```{r}
+sorted_diff_d = arrange(learned_diff_d %>% filter(num_layers==3, nonlinear), desc(learn_diff))
+head(sorted_diff_d)
+
+tail(sorted_diff_d)
+
+```
+
+```{r}
+ggplot(data=d %>% filter(run %in% c(80, 104, 107), num_layers==3, nonlinear), aes(x=epoch, y=d1_MSE, color=analogous)) +
+  geom_line(aes(group=interaction(run, analogous))) +
+  labs(y="Loss (L2)") +
+  scale_color_brewer(palette="Set1")
+```
+
+Since we know in the 3 layer case that the transfer effect **must** be happening at the middle layer, since these are the only shared weights. This provides a nice target for analysis.
+
+## why are some 4-layer linear runs showing effects in the other direction?
+
+
+```{r}
+ggplot(data=d %>% filter(run %in% c(98), num_layers==4, !nonlinear), aes(x=epoch, y=d1_MSE, color=analogous)) +
+  geom_line(aes(group=interaction(run, analogous))) +
+  labs(y="Loss (L2)") +
+  scale_color_brewer(palette="Set1")
+```
+
+```{r}
+ggplot(data=d %>% filter(run %in% c(98), num_layers==4, !nonlinear), aes(x=epoch, y=MSE, color=analogous)) +
+  geom_line(aes(group=interaction(run, analogous))) +
+  labs(y="Loss (L2)") +
+  scale_color_brewer(palette="Set1")
+```
+
+Might just be single-domain weirdness and the exaggeration that happens with depth... Should investigate further.
