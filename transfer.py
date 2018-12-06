@@ -16,30 +16,29 @@ run_offset = 0
 num_inputs = 6
 num_outputs = 8
 num_hidden = 6
-save_detailed = True # currently most useful for 3 layer, saves detailed info
-                     # about the evolution of the penultimate weights and reps.
+save_detailed = False # currently most useful for 3 layer, saves detailed info
+                      # about the evolution of the penultimate weights and reps.
 ###################################
 nonlinearity_function = tf.nn.relu
 
-sigma_31 = np.array(
-    [[1, 1, 0, 0, 0, 0, 0, 0],
-     [1, 0, 1, 0, 0, 0, 0, 0],
-     [1, 0, 0, 1, 0, 0, 0, 0],
-     [0, 0, 0, 0, 1, 1, 0, 0],
-     [0, 0, 0, 0, 1, 0, 1, 0],
-     [0, 0, 0, 0, 1, 0, 0, 1]])
+structure_1 = np.array( 
+    [[1, 1, 0, 0],
+     [1, 0, 1, 0],
+     [1, 0, 0, 1]])
 
 rt_3 = np.sqrt(3)
 rt_2 = np.sqrt(2)
-sigma_31_no = np.array(
-    [[1, 1, 0, 0, 0, 0, 0, 0],
-     [1, 0, 1, 0, 0, 0, 0, 0],
-     [1, 0, 0, 1, 0, 0, 0, 0],
-     [0, 0, 0, 0, 2, 0, 0, 0],
-     [0, 0, 0, 0, 0, 1/rt_2, 1/rt_2, 0],
-     [0, 0, 0, 0, 0, 0, 0, 1]])
 
-for rseed in [66, 80, 104, 107]: #xrange(run_offset, run_offset + nruns):
+structure_2 = np.array(
+    [[2, 0, 0, 0],
+    [0, 1./rt_2, 1./rt_2, 0],
+    [0, 0, 0, 1]])
+
+sigma_31 = block_diag(structure_2, structure_2) 
+
+sigma_31_no = block_diag(structure_2, structure_1) 
+
+for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
     np.random.seed(rseed)
 
     _, S1, V1 = np.linalg.svd(sigma_31[:num_inputs//2, :num_outputs//2], full_matrices=False)
@@ -79,13 +78,13 @@ for rseed in [66, 80, 104, 107]: #xrange(run_offset, run_offset + nruns):
         np.savetxt("no_analogy_data.csv", y_data_no, delimiter=',')
         np.savetxt("analogy_data.csv", y_data, delimiter=',')
 
-    for nonlinear in [True]:#, False]:
+    for nonlinear in [True, False]:
         nonlinearity_function = tf.nn.leaky_relu
-        for nlayer in [3]: #[4, 3, 2]:
+        for nlayer in [4, 3, 2]: #[3]: #
             for analogous in [0, 1]:
                 num_hidden = num_hidden
                 print "nlayer %i nonlinear %i analogous %i run %i" % (nlayer, nonlinear, analogous, rseed)
-                filename_prefix = "results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_" %(nlayer,nonlinear,analogous,rseed)
+                filename_prefix = "results_swapped_structures/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_" %(nlayer,nonlinear,analogous,rseed)
 
                 np.random.seed(rseed)
                 tf.set_random_seed(rseed)
