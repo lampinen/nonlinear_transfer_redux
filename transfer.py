@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from scipy.linalg import block_diag
+from scipy.spatial.distance import pdist, squareform
 from orthogonal_matrices import random_orthogonal
 
 ######Parameters###################
@@ -16,9 +17,15 @@ run_offset = 0
 num_inputs = 6
 num_outputs = 8
 num_hidden = 6
-save_detailed = False # currently most useful for 3 layer, saves detailed info
+save_detailed = True # currently most useful for 3 layer, saves detailed info
                       # about the evolution of the penultimate weights and reps.
+save_summarized_detailed = False # same but saves a less ridiculous amount of data
 ###################################
+def abs_loading_diffs(x, y):
+    x = np.abs(x)
+    y = np.abs(y)
+    return np.abs(np.sum(x) - np.sum(y))
+
 nonlinearity_function = tf.nn.relu
 
 structure_1 = np.array( 
@@ -34,11 +41,11 @@ structure_2 = np.array(
     [0, 1./rt_2, 1./rt_2, 0],
     [0, 0, 0, 1]])
 
-sigma_31 = block_diag(structure_2, structure_2) 
+sigma_31 = block_diag(structure_1, structure_1) 
 
-sigma_31_no = block_diag(structure_2, structure_1) 
+sigma_31_no = block_diag(structure_1, structure_2) 
 
-for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
+for rseed in [66, 80, 104, 107]: #xrange(run_offset, run_offset + nruns):#
     np.random.seed(rseed)
 
     _, S1, V1 = np.linalg.svd(sigma_31[:num_inputs//2, :num_outputs//2], full_matrices=False)
@@ -78,13 +85,13 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
         np.savetxt("no_analogy_data.csv", y_data_no, delimiter=',')
         np.savetxt("analogy_data.csv", y_data, delimiter=',')
 
-    for nonlinear in [True, False]:
+    for nonlinear in [True]:
         nonlinearity_function = tf.nn.leaky_relu
-        for nlayer in [4, 3, 2]: #[3]: #
+        for nlayer in [3]: #[3]: #
             for analogous in [0, 1]:
                 num_hidden = num_hidden
                 print "nlayer %i nonlinear %i analogous %i run %i" % (nlayer, nonlinear, analogous, rseed)
-                filename_prefix = "results_swapped_structures/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_" %(nlayer,nonlinear,analogous,rseed)
+                filename_prefix = "results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_" %(nlayer,nonlinear,analogous,rseed)
 
                 np.random.seed(rseed)
                 tf.set_random_seed(rseed)
@@ -103,6 +110,8 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                     internal_rep = nonlinearity_function(internal_rep)
 
                 for layer_i in range(1, nlayer-1):
+                    if layer_i == nlayer-2:
+                        penultimate_rep = internal_rep
                     W = tf.Variable(tf.random_normal([num_hidden,num_hidden],0.,0.5/num_hidden))
                     b = tf.Variable(tf.zeros([num_hidden]))
                     hidden_weights.append((W, b))
@@ -158,6 +167,10 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                         np.savetxt(fout, res, delimiter=',')
 
 
+                def get_activations(tf_object):
+                    return sess.run(tf_object, feed_dict={input_ph: this_x_data})
+
+
                 def save_weights(tf_object,filename,remove_old=True):
                     if remove_old and os.path.exists(filename):
                         os.remove(filename)
@@ -171,12 +184,22 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
 
                 def save_penultimate_details(filename_prefix, epoch):
                     # save activations for the different inputs
-                    save_activations(internal_rep, filename_prefix + "penultimate_hidden_reps_epoch_%i.csv" % epoch)
+                    save_activations(penultimate_rep, filename_prefix + "penultimate_hidden_reps_epoch_%i.csv" % epoch)
                     W, b = hidden_weights[-1]
                     U, S, V = np.linalg.svd(sess.run(W), full_matrices=False)
                     np.savetxt(filename_prefix + "penultimate_U_epoch_%i.csv" % epoch, U, delimiter=',') 
                     np.savetxt(filename_prefix + "penultimate_S_epoch_%i.csv" % epoch, S, delimiter=',') 
                     np.savetxt(filename_prefix + "penultimate_V_epoch_%i.csv" % epoch, V, delimiter=',') 
+
+
+                def save_summarized_penultimate_details(outfiles, epoch):
+                    # save activations for the different inputs
+                    reps = get_activations(penultimate_rep)
+                    W, b = hidden_weights[-1]
+                    U, S, _ = np.linalg.svd(sess.run(W), full_matrices=False)
+                    simils = square_form(pdist(reps, metric='cosine')) 
+                    reps /= np.sqrt(np.sum(np.square(reps), axis=-1))
+                    projs = np.matmul(reps, U)
 
 
                 print "Initial MSE: %f, %f" %(test_accuracy())
@@ -204,6 +227,10 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
 #                                save_activations(pre_output,filename_prefix+"epoch_%i_pre_outputs.csv" %epoch)
                         if save_detailed and epoch % 100 == 0:
                             save_penultimate_details(filename_prefix, epoch)
+
+                        if save_summarized_detailed and epoch % 100 == 0:
+                            save_summarized_penultimate_details(outfile, epoch)
+
                         
                         if epoch % eta_decay_epoch == 0:
                             curr_eta *= eta_decay
