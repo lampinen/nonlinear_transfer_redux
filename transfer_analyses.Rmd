@@ -11,7 +11,7 @@ library(lmerTest)
 
 # load data
 ```{r}
-num_runs = 200
+num_runs = 67
 num_layerss = 2:4
 ```
 
@@ -21,7 +21,7 @@ for (run_i in 0:(num_runs-1)) {
   for (num_layers in num_layerss) {
     for (analogous in 0:1) {
       for (nonlinear in 0:1) {
-        filename = sprintf("results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_loss_track.csv",
+        filename = sprintf("results_swapped_structures/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_loss_track.csv",
                            num_layers, nonlinear, analogous, run_i)
         this_d = read_csv(filename) %>%
           mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:1, labels=c("non-analogous", "analogous")), num_layers=num_layers)
@@ -69,6 +69,7 @@ learned_d = d %>%
 
 ```{r}
 model = lmer(learned_epoch ~ analogous  * nonlinear + (1 | run), learned_d %>% filter(num_layers==3))
+
 summary(model)
 ```
 
@@ -135,3 +136,37 @@ ggplot(data=d %>% filter(run %in% c(98), num_layers==4, !nonlinear), aes(x=epoch
 ```
 
 Might just be single-domain weirdness and the exaggeration that happens with depth... Should investigate further.
+
+
+# Investigating how the penultimate layer weights change
+
+```{r}
+detailed_runs = c(66, 80, 104, 107)
+num_layers = 3
+```
+
+```{r}
+weight_d = data.frame()
+for (run_i in detailed_runs) {
+  for (analogous in 0:1) {
+    for (nonlinear in 0:1) {
+      for (epoch in seq(0, 200000, 100)) {
+        filename = sprintf("results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_penultimate_S_epoch_%i.csv",
+                           num_layers, nonlinear, analogous, run_i, epoch)
+        if (!file.exists(filename)) {
+          next
+        }
+        this_d = read_csv(filename, col_names=c("S")) %>%
+          mutate(run=run_i, epoch=epoch, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:1, labels=c("non-analogous", "analogous")), num_layers=num_layers, S_rank=1:6)
+        weight_d = bind_rows(weight_d, this_d)
+      }
+    }
+  }
+}
+```
+
+
+```{r}
+
+```
+
