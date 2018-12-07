@@ -202,6 +202,15 @@ final_proj_d = part_summarized_proj_d %>%
   group_by(run, analogous, mode_rank) %>%
   filter(epoch == max(epoch)) %>%
   ungroup()
+
+early_proj_d = part_summarized_proj_d %>%
+  group_by(run, analogous, mode_rank) %>%
+  filter(epoch == 5000) %>%
+  ungroup() %>%
+  select(-abs_proj_1, -abs_proj_2, -epoch) %>%
+  rename(early_abs_proj_diff=abs_proj_diff)
+  
+
 ```
 
 ```{r}
@@ -241,6 +250,19 @@ final_simil_d = part_summarized_simil_d %>%
   group_by(run, analogous, type) %>%
   filter(epoch == max(epoch)) %>%
   ungroup()
+
+early_simil_d = part_summarized_simil_d %>%
+  group_by(run, analogous, type) %>%
+  filter(epoch == 5000) %>%
+  ungroup() %>%
+  select(-epoch)
+
+initial_simil_d = part_summarized_simil_d %>%
+  group_by(run, analogous, type) %>%
+  filter(epoch == 0) %>%
+  ungroup() %>%
+  select(-epoch)
+
 ```
 
 ```{r}
@@ -313,7 +335,17 @@ learned_and_features_d = learned_d %>%
               select(-mean_abs_cosine) %>%
               mutate(type=paste("cosine_distance_", type, sep="")) %>%
               spread(type, mean_cosine_distance)) %>%
+  left_join(early_simil_d %>% 
+              select(-mean_abs_cosine) %>%
+              mutate(type=paste("early_cosine_distance_", type, sep="")) %>%
+              spread(type, mean_cosine_distance)) %>%
+  left_join(initial_simil_d %>% 
+              select(-mean_abs_cosine) %>%
+              mutate(type=paste("initial_cosine_distance_", type, sep="")) %>%
+              spread(type, mean_cosine_distance)) %>%
   left_join(final_proj_d %>%
+              filter(mode_rank==0)) %>%
+  left_join(early_proj_d %>%
               filter(mode_rank==0))
 ```
 
@@ -368,5 +400,35 @@ sobel_getter = function(data, indices) {
 
 ```{r}
 boot_results = boot(statistic=sobel_getter, data=learned_and_features_d, R=1000)
+boot.ci(boot_results)
 ```
 
+### is the early abs proj diff predictive of early S?
+
+```{r}
+early_proj_S = lm(S ~ early_abs_proj_diff, learned_and_features_d)
+summary(early_proj_S)
+```
+
+No.
+
+### What about similarities?
+
+```{r}
+simil_S = lmer(S ~ early_cosine_distance_between_analog + (1|run), learned_and_features_d)
+summary(simil_S)
+```
+
+```{r}
+simil_analog_S = lmer(S ~ early_cosine_distance_between_analog + analogous + (1|run), learned_and_features_d)
+summary(simil_analog_S)
+```
+
+Is this just because of initialization effects?
+
+```{r}
+simil_init_S = lmer(S ~  early_cosine_distance_between_analog + initial_cosine_distance_between_analog + analogous + (1|run), learned_and_features_d)
+summary(simil_init_S)
+```
+
+No, it appears to really be a key feature (although it's not explaining the full effect, possibly because of time-slicing rather than taking the full trajectory?)
