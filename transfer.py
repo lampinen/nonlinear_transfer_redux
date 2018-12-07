@@ -17,15 +17,10 @@ run_offset = 0
 num_inputs = 6
 num_outputs = 8
 num_hidden = 6
-save_detailed = True # currently most useful for 3 layer, saves detailed info
+save_detailed = False # currently most useful for 3 layer, saves detailed info
                       # about the evolution of the penultimate weights and reps.
-save_summarized_detailed = False # same but saves a less ridiculous amount of data
+save_summarized_detailed = True # same but saves a less ridiculous amount of data
 ###################################
-def abs_loading_diffs(x, y):
-    x = np.abs(x)
-    y = np.abs(y)
-    return np.abs(np.sum(x) - np.sum(y))
-
 nonlinearity_function = tf.nn.relu
 
 structure_1 = np.array( 
@@ -45,7 +40,7 @@ sigma_31 = block_diag(structure_1, structure_1)
 
 sigma_31_no = block_diag(structure_1, structure_2) 
 
-for rseed in [66, 80, 104, 107]: #xrange(run_offset, run_offset + nruns):#
+for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
     np.random.seed(rseed)
 
     _, S1, V1 = np.linalg.svd(sigma_31[:num_inputs//2, :num_outputs//2], full_matrices=False)
@@ -197,14 +192,35 @@ for rseed in [66, 80, 104, 107]: #xrange(run_offset, run_offset + nruns):#
                     reps = get_activations(penultimate_rep)
                     W, b = hidden_weights[-1]
                     U, S, _ = np.linalg.svd(sess.run(W), full_matrices=False)
-                    simils = square_form(pdist(reps, metric='cosine')) 
+                    simils = squareform(pdist(reps, metric='cosine')) 
                     reps /= np.sqrt(np.sum(np.square(reps), axis=-1))
                     projs = np.matmul(reps, U)
+                    sout, svout, pout = outfiles
+                    for i in range(num_inputs-1):
+                        for j in range(i+1, num_inputs):
+                            sout.write("%i, %i, %i, %f\n" % (epoch, i, j, simils[i, j]))
+
+                    for i in range(len(S)):
+                        svout.write("%i, %i, %f\n" % (epoch, i, S[i]))
+
+                    for i in range(num_inputs):
+                        for j in range(num_hidden):
+                            pout.write("%i, %i, %i, %f\n" % (epoch, i, j, projs[i, j]))
 
 
                 print "Initial MSE: %f, %f" %(test_accuracy())
-
                 #loaded_pre_outputs = np.loadtxt(pre_output_filename_to_load,delimiter=',')
+                if save_summarized_detailed:
+                    simil_filename = filename_prefix + "penultimate_simil_track.csv"
+                    sout = open(simil_filename, "w") 
+                    sout.write("epoch, rep_i, rep_j, cosine_similarity\n")
+                    singular_value_filename = filename_prefix + "penultimate_S_track.csv"
+                    svout = open(singular_value_filename, "w") 
+                    svout.write("epoch, rank, S\n")
+                    proj_filename = filename_prefix + "penultimate_proj_track.csv"
+                    pout = open(proj_filename, "w") 
+                    pout.write("epoch, rep_i, mode_j, projection\n")
+                    outfiles = (sout, svout, pout)
 
                 curr_eta = init_eta
                 rep_track = []
@@ -229,11 +245,15 @@ for rseed in [66, 80, 104, 107]: #xrange(run_offset, run_offset + nruns):#
                             save_penultimate_details(filename_prefix, epoch)
 
                         if save_summarized_detailed and epoch % 100 == 0:
-                            save_summarized_penultimate_details(outfile, epoch)
+                            save_summarized_penultimate_details(outfiles, epoch)
 
                         
                         if epoch % eta_decay_epoch == 0:
                             curr_eta *= eta_decay
                     
+                if save_summarized_detailed:
+                    for i in range(len(outfiles)):
+                        outfiles[i].close()
+
                 print "Final MSE: %f, %f" %(test_accuracy())
                 tf.reset_default_graph()
