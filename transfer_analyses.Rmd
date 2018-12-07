@@ -141,7 +141,7 @@ Might just be single-domain weirdness and the exaggeration that happens with dep
 # Investigating how the penultimate layer weights change
 
 ```{r}
-detailed_runs = 0:49
+detailed_runs = 0:135
 num_layers = 3
 ```
 
@@ -219,29 +219,29 @@ ggplot(final_proj_d, aes(x=abs_proj_diff, color=analogous)) +
 
 ```{r}
 part_summarized_simil_d = simil_d %>%
+  rename(cosine_distance=cosine_similarity) %>% # fix incorrect label in data output
   mutate(type= case_when(rep_j == rep_i + 3 ~ "between_analog", 
                          rep_i < 3 & rep_j >= 3 ~ "between_nonanalog",
                          rep_i < 3 & rep_j < 3 ~ "within_d1",
                          T ~ "within_d2"),
-         abs_cosine=abs(1-cosine_similarity)) %>%
+         abs_cosine=abs(1-cosine_distance)) %>%
   group_by(run, analogous, epoch, type) %>%
   summarize(mean_abs_cosine = mean(abs_cosine),
-            mean_cosine_similarity = mean(cosine_similarity))
+            mean_cosine_distance = mean(cosine_distance))
 
 summarized_simil_d = part_summarized_simil_d %>%
   group_by(epoch, analogous, type) %>%
   summarize(mean_abs_cosine = mean(mean_abs_cosine),
-            mean_cosine_similarity = mean(mean_cosine_similarity))
+            mean_cosine_distance = mean(mean_cosine_distance))
 
 final_simil_d = part_summarized_simil_d %>%
   group_by(run, analogous, type) %>%
   filter(epoch == max(epoch)) %>%
   ungroup()
-
 ```
 
 ```{r}
-ggplot(final_simil_d, aes(x=mean_cosine_similarity, color=analogous)) +
+ggplot(final_simil_d, aes(x=mean_cosine_distance, color=analogous)) +
   geom_density() +
   scale_color_brewer(palette="Set1") +
   facet_grid(~type)
@@ -271,6 +271,12 @@ final_sv_d = sv_d %>%
   group_by(analogous, run, mode_rank) %>% 
   filter(epoch == max(epoch)) %>%
   ungroup()
+
+early_sv_d = sv_d %>%
+  group_by(analogous, run, mode_rank) %>% 
+  filter(epoch == 5000) %>%
+  select(-epoch) %>%
+  ungroup()
 ```
 
 ```{r}
@@ -283,8 +289,7 @@ ggplot(final_sv_d, aes(x=S, color=analogous)) +
 ```{r}
 ggplot(summarized_sv_d, aes(x=epoch, y=mean_norm_S, color=analogous)) +
   geom_line() +
-  scale_color_brewer(palette="Set1") +
-  facet_grid(~mode_rank)
+  scale_color_brewer(palette="Set1")
 ```
 
 ```{r}
@@ -298,18 +303,26 @@ ggplot(summarized_sv_d, aes(x=epoch, y=mean_S, color=analogous)) +
 ```{r}
 learned_and_features_d = learned_d %>%
   filter(nonlinear, num_layers==3) %>%
-  left_join(final_sv_d %>%
+  left_join(early_sv_d %>%
               filter(mode_rank==0)) %>%
   left_join(final_simil_d %>% 
               select(-mean_abs_cosine) %>%
-              mutate(type=paste("cosine_similarity_", type, sep="")) %>%
-              spread(type, mean_cosine_similarity)) %>%
+              mutate(type=paste("cosine_distance_", type, sep="")) %>%
+              spread(type, mean_cosine_distance)) %>%
   left_join(final_proj_d %>%
               filter(mode_rank==0))
 ```
 
 ```{r}
-model = lmer(learned_epoch ~ analogous + S + cosine_similarity_between_analog + cosine_similarity_between_nonanalog + abs_proj_diff + (1 | run), learned_and_features_d)
-
+model = lmer(learned_epoch ~ analogous + S + cosine_distance_between_analog + cosine_distance_between_nonanalog + abs_proj_diff + (1 | run), learned_and_features_d)
+BIC(model)
 summary(model)
 ```
+
+```{r}
+simple_model = lmer(learned_epoch ~ analogous + S + (1 | run), learned_and_features_d)
+BIC(simple_model)
+summary(simple_model)
+```
+
+Seems like the early increase in S is doing much of the work, but not all (based on BIC difference).

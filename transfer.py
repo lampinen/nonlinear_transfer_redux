@@ -213,7 +213,7 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                 if save_summarized_detailed:
                     simil_filename = filename_prefix + "penultimate_simil_track.csv"
                     sout = open(simil_filename, "w") 
-                    sout.write("epoch, rep_i, rep_j, cosine_similarity\n")
+                    sout.write("epoch, rep_i, rep_j, cosine_similarity\n") # note: this should actually be cosine _distance_, whoops
                     singular_value_filename = filename_prefix + "penultimate_S_track.csv"
                     svout = open(singular_value_filename, "w") 
                     svout.write("epoch, rank, S\n")
