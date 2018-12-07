@@ -11,17 +11,17 @@ library(lmerTest)
 
 # load data
 ```{r}
-num_runs = 67
+num_runs = 200
 num_layerss = 2:4
 ```
 
-```{r}
+```{r message=F, warning=F}
 d = data.frame()
 for (run_i in 0:(num_runs-1)) {
   for (num_layers in num_layerss) {
     for (analogous in 0:1) {
       for (nonlinear in 0:1) {
-        filename = sprintf("results_swapped_structures/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_loss_track.csv",
+        filename = sprintf("results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_loss_track.csv",
                            num_layers, nonlinear, analogous, run_i)
         this_d = read_csv(filename) %>%
           mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:1, labels=c("non-analogous", "analogous")), num_layers=num_layers)
@@ -141,32 +141,175 @@ Might just be single-domain weirdness and the exaggeration that happens with dep
 # Investigating how the penultimate layer weights change
 
 ```{r}
-detailed_runs = c(66, 80, 104, 107)
+detailed_runs = 0:49
 num_layers = 3
 ```
 
-```{r}
-weight_d = data.frame()
+```{r message=FALSE}
+simil_d = data.frame()
+sv_d = data.frame()
+proj_d = data.frame()
 for (run_i in detailed_runs) {
   for (analogous in 0:1) {
-    for (nonlinear in 0:1) {
-      for (epoch in seq(0, 200000, 100)) {
-        filename = sprintf("results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_penultimate_S_epoch_%i.csv",
-                           num_layers, nonlinear, analogous, run_i, epoch)
-        if (!file.exists(filename)) {
-          next
-        }
-        this_d = read_csv(filename, col_names=c("S")) %>%
-          mutate(run=run_i, epoch=epoch, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:1, labels=c("non-analogous", "analogous")), num_layers=num_layers, S_rank=1:6)
-        weight_d = bind_rows(weight_d, this_d)
+    for (nonlinear in c(1)) {
+      filename = sprintf("results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_penultimate_simil_track.csv",
+                         num_layers, nonlinear, analogous, run_i)
+      if (!file.exists(filename)) {
+        next
       }
+      this_d = read_csv(filename) %>%
+        mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:1, labels=c("non-analogous", "analogous")), num_layers=num_layers)
+      simil_d = bind_rows(simil_d, this_d)
+      
+      filename = sprintf("results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_penultimate_S_track.csv",
+                         num_layers, nonlinear, analogous, run_i)
+      this_d = read_csv(filename) %>%
+        mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:1, labels=c("non-analogous", "analogous")), num_layers=num_layers)
+      sv_d = bind_rows(sv_d, this_d)
+
+      filename = sprintf("results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_penultimate_proj_track.csv",
+                         num_layers, nonlinear, analogous, run_i)
+      this_d = read_csv(filename) %>%
+        mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:1, labels=c("non-analogous", "analogous")), num_layers=num_layers)
+      proj_d = bind_rows(proj_d, this_d)
     }
   }
 }
 ```
 
 
+## projections
 ```{r}
+part_summarized_proj_d = proj_d %>%
+  mutate(mode_rank = mode_j,
+         abs_projection=projection) %>%
+  select(-projection) %>%
+  spread(rep_i, abs_projection) %>%
+  group_by(run, analogous, epoch, mode_rank) %>%
+  summarize(abs_proj_1 = `0` + `1` + `2`,
+            abs_proj_2 = `3` + `4` + `5`,
+            abs_proj_diff = abs(abs_proj_1 - abs_proj_2)) %>% # how much is the mode biased towards one domain?
+  ungroup() 
+
+summarized_proj_d = part_summarized_proj_d %>%
+  group_by(analogous, epoch, mode_rank) %>%
+  summarize(mean_abs_proj_diff = mean(abs_proj_diff), sd_abs_proj_diff = sd(abs_proj_diff))
+
+final_proj_d = part_summarized_proj_d %>%
+  group_by(run, analogous, mode_rank) %>%
+  filter(epoch == max(epoch)) %>%
+  ungroup()
+```
+
+```{r}
+ggplot(summarized_proj_d %>% filter(mode_rank < 2), aes(x=epoch, y=mean_abs_proj_diff, color=analogous)) +
+  geom_line() +
+  scale_color_brewer(palette="Set1") +
+  facet_grid(~mode_rank)
+```
+
+```{r}
+ggplot(final_proj_d, aes(x=abs_proj_diff, color=analogous)) +
+  geom_density() +
+  scale_color_brewer(palette="Set1") +
+  facet_grid(~mode_rank)
+```
+
+## similarities 
+
+```{r}
+part_summarized_simil_d = simil_d %>%
+  mutate(type= case_when(rep_j == rep_i + 3 ~ "between_analog", 
+                         rep_i < 3 & rep_j >= 3 ~ "between_nonanalog",
+                         rep_i < 3 & rep_j < 3 ~ "within_d1",
+                         T ~ "within_d2"),
+         abs_cosine=abs(1-cosine_similarity)) %>%
+  group_by(run, analogous, epoch, type) %>%
+  summarize(mean_abs_cosine = mean(abs_cosine),
+            mean_cosine_similarity = mean(cosine_similarity))
+
+summarized_simil_d = part_summarized_simil_d %>%
+  group_by(epoch, analogous, type) %>%
+  summarize(mean_abs_cosine = mean(mean_abs_cosine),
+            mean_cosine_similarity = mean(mean_cosine_similarity))
+
+final_simil_d = part_summarized_simil_d %>%
+  group_by(run, analogous, type) %>%
+  filter(epoch == max(epoch)) %>%
+  ungroup()
 
 ```
 
+```{r}
+ggplot(final_simil_d, aes(x=mean_cosine_similarity, color=analogous)) +
+  geom_density() +
+  scale_color_brewer(palette="Set1") +
+  facet_grid(~type)
+```
+
+
+```{r}
+ggplot(final_simil_d, aes(x=mean_abs_cosine, color=analogous)) +
+  geom_density() +
+  scale_color_brewer(palette="Set1") +
+  facet_grid(~type)
+```
+
+## singular values
+```{r}
+sv_d = sv_d %>%
+  rename(mode_rank=rank) %>%
+  group_by(run, mode_rank, analogous) %>%
+  mutate(norm_S = S/max(S)) %>%
+  ungroup()
+
+summarized_sv_d = sv_d %>%
+  group_by(analogous, epoch, mode_rank) %>%
+  summarize(mean_norm_S=mean(norm_S), mean_S=mean(S))
+
+final_sv_d = sv_d %>%
+  group_by(analogous, run, mode_rank) %>% 
+  filter(epoch == max(epoch)) %>%
+  ungroup()
+```
+
+```{r}
+ggplot(final_sv_d, aes(x=S, color=analogous)) +
+  geom_density() +
+  scale_color_brewer(palette="Set1") +
+  facet_grid(~mode_rank)
+```
+
+```{r}
+ggplot(summarized_sv_d, aes(x=epoch, y=mean_norm_S, color=analogous)) +
+  geom_line() +
+  scale_color_brewer(palette="Set1") +
+  facet_grid(~mode_rank)
+```
+
+```{r}
+ggplot(summarized_sv_d, aes(x=epoch, y=mean_S, color=analogous)) +
+  geom_line() +
+  scale_color_brewer(palette="Set1") +
+  facet_grid(~mode_rank)
+```
+
+## do these features help explain transfer?
+```{r}
+learned_and_features_d = learned_d %>%
+  filter(nonlinear, num_layers==3) %>%
+  left_join(final_sv_d %>%
+              filter(mode_rank==0)) %>%
+  left_join(final_simil_d %>% 
+              select(-mean_abs_cosine) %>%
+              mutate(type=paste("cosine_similarity_", type, sep="")) %>%
+              spread(type, mean_cosine_similarity)) %>%
+  left_join(final_proj_d %>%
+              filter(mode_rank==0))
+```
+
+```{r}
+model = lmer(learned_epoch ~ analogous + S + cosine_similarity_between_analog + cosine_similarity_between_nonanalog + abs_proj_diff + (1 | run), learned_and_features_d)
+
+summary(model)
+```
