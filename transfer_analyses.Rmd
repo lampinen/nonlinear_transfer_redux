@@ -11,7 +11,7 @@ library(lmerTest)
 
 # load data
 ```{r}
-num_runs = 200
+num_runs = 500
 num_layerss = 2:4
 ```
 
@@ -23,6 +23,9 @@ for (run_i in 0:(num_runs-1)) {
       for (nonlinear in 0:1) {
         filename = sprintf("results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_loss_track.csv",
                            num_layers, nonlinear, analogous, run_i)
+        if (!file.exists(filename)) {
+          next
+        }
         this_d = read_csv(filename) %>%
           mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:1, labels=c("non-analogous", "analogous")), num_layers=num_layers)
         d = bind_rows(d, this_d)
@@ -141,7 +144,7 @@ Might just be single-domain weirdness and the exaggeration that happens with dep
 # Investigating how the penultimate layer weights change
 
 ```{r}
-detailed_runs = 0:135
+detailed_runs = 0:499
 num_layers = 3
 ```
 
@@ -289,7 +292,8 @@ ggplot(final_sv_d, aes(x=S, color=analogous)) +
 ```{r}
 ggplot(summarized_sv_d, aes(x=epoch, y=mean_norm_S, color=analogous)) +
   geom_line() +
-  scale_color_brewer(palette="Set1")
+  scale_color_brewer(palette="Set1") +
+  facet_wrap(~mode_rank)
 ```
 
 ```{r}
@@ -314,6 +318,12 @@ learned_and_features_d = learned_d %>%
 ```
 
 ```{r}
+model_non_analogous = lmer(learned_epoch ~ S + cosine_distance_between_analog + cosine_distance_between_nonanalog + abs_proj_diff + (1 | run), learned_and_features_d)
+BIC(model_non_analogous)
+summary(model_non_analogous)
+```
+
+```{r}
 model = lmer(learned_epoch ~ analogous + S + cosine_distance_between_analog + cosine_distance_between_nonanalog + abs_proj_diff + (1 | run), learned_and_features_d)
 BIC(model)
 summary(model)
@@ -325,4 +335,38 @@ BIC(simple_model)
 summary(simple_model)
 ```
 
-Seems like the early increase in S is doing much of the work, but not all (based on BIC difference).
+```{r}
+proj_S = lmer(S ~ abs_proj_diff + (1 | run), learned_and_features_d)
+summary(proj_S)
+```
+```{r}
+direct = lmer(learned_epoch ~ analogous + (1 | run), learned_and_features_d)
+BIC(direct)
+summary(direct)
+```
+
+Seems like the early increase in S is doing much of the work, but the other features are also important (based on BIC differences).
+
+### actual mediation test
+
+```{r}
+library(boot)
+```
+
+```{r}
+sobel_getter = function(data, indices) {
+  boot_data = data[indices,]
+  analogous_S = lmer(S ~ analogous + (1 | run), boot_data)
+  A = analogous_S@beta[2]
+  
+  S_learned = lmer(learned_epoch ~ S + (1 | run), boot_data)
+  B = S_learned@beta[2]
+  
+  return(A*B)
+}
+```
+
+```{r}
+boot_results = boot(statistic=sobel_getter, data=learned_and_features_d, R=1000)
+```
+
