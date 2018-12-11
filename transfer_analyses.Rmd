@@ -481,11 +481,16 @@ lag_vars = function(vars_to_lag, lags, grouping_vars, data) {
 
 ```{r}
 predictivity_getter = function(var_Y, var_X, data) {
-  formula = sprintf("%s ~ %s + (1|run)", var_Y, var_X) # there are issues with the choice of including a random effect of run
-                                                       # but the issues with not including it seem worse, since the predictor
-                                                       # of real interest (analogous) is independent of run.
-  res = lmer(formula, data)
-  return(res@beta[2])
+  ## this makes no difference if we're z-scoring within run
+  # formula = sprintf("%s ~ %s + (1|run)", var_Y, var_X) # there are issues with the choice of including a random effect of run
+  #                                                      # but the issues with not including it seem worse, since the predictor
+  #                                                      # of real interest (analogous) is independent of run.
+  # res = lmer(formula, data)
+  # return(res@beta[2])
+  
+  formula = sprintf("%s ~ %s", var_Y, var_X) 
+  res = lm(formula, data)
+  return(res$coefficients[2])
 }
 ```
 
