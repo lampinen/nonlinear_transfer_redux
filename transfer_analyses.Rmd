@@ -457,7 +457,7 @@ learning_features_d = d %>%
          d1_MSE_z = scale(d1_MSE)) %>%
   ungroup()
 ```
-
+Lag variables within the data
 ```{r}
 lag_vars = function(vars_to_lag, lags, grouping_vars, data) {
   res_data = data %>% 
@@ -480,28 +480,51 @@ lag_vars = function(vars_to_lag, lags, grouping_vars, data) {
 ```
 
 ```{r}
-predictivity_getter = function(var_A, var_B, grouping_vars, lag, data) {
-  lagged_var_B = sprintf("%s_lag", var_B)
-  formula = sprintf("%s ~ %s + (1|run)", var_A, lagged_var_B, lag) # there are issues with the choice of including a random effect of run
-                                                            # but the issues with not including it seem worse, since the predictor
-                                                            # of real interest (analogous) is independent of run.
-  this_data = data %>% # this awkward step prevents lagging across run boundaries
-    group_by_at(vars(one_of(grouping_vars))) %>%
-    mutate(!!lagged_var_B := lag(!!sym(var_B), lag)) %>%
-    ungroup()
-  res = lmer(formula, this_data)
+predictivity_getter = function(var_Y, var_X, data) {
+  formula = sprintf("%s ~ %s + (1|run)", var_Y, var_X) # there are issues with the choice of including a random effect of run
+                                                       # but the issues with not including it seem worse, since the predictor
+                                                       # of real interest (analogous) is independent of run.
+  res = lmer(formula, data)
   return(res@beta[2])
 }
-predictivity_getter("S_z", "cosine_distance_between_analog_z", c("run", "analogous"), 1, learning_features_d)
+```
+
+Generate plots
+```{r}
+generate_lagged_predictivity_plots = function(vars_of_interest, lags, data) {
+  plot_d = data.frame()
+  for (var_Y in vars_of_interest) {
+    for (var_X in vars_of_interest) {
+      for (l in lags) {
+        var_X_lagged = sprintf("%s_lag_%i", var_X, l)
+        this_d = data.frame(var_Y=var_Y, var_X=var_X, lag=l,
+                            predictivity=predictivity_getter(var_Y,
+                                                             var_X_lagged,
+                                                             data))
+        plot_d = bind_rows(plot_d, this_d)
+      }
+    }
+  }
+  
+  p = ggplot(plot_d, aes(x=lag, y=abs(predictivity))) +
+    geom_line() +
+    geom_point() +
+    scale_x_continuous(breaks=lags) +
+    facet_grid(var_Y ~ var_X)
+  return(p)
+}
 ```
 
 ```{r testing functions, eval=F}
-dummy_d = data.frame(blah=rep(c("A", "B"), each=5),
-                     time=rep(1:5, 2),
-                     x=rnorm(10)) %>%
-  group_by(blah) %>%
-  mutate(y = ifelse(is.na(lag(x, 1)), rnorm(1), lag(x, 1) + rnorm(1, sd=0.1))) %>%
+dummy_d = data.frame(run=rep(c("A", "B"), each=10),
+                     time=rep(1:10, 2),
+                     x=rnorm(20)) %>%
+  group_by(run) %>%
+  mutate(y = ifelse(is.na(lag(x, 1)), rnorm(1), lag(x, 1) + rnorm(n(), sd=0.1))) %>%
   ungroup()
 dummy_d
-lag_vars(c("x","y"), 0:2, c("blah"), dummy_d)
+dummy_d_lagged = lag_vars(c("x","y"), 0:2, c("run"), dummy_d)
+predictivity_getter("y", "x", dummy_d_lagged)
+predictivity_getter("y", "x_lag_1", dummy_d_lagged)
+generate_lagged_predictivity_plots(c("y","x"), 0:2, dummy_d_lagged)
 ```
