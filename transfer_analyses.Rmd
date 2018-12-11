@@ -399,6 +399,7 @@ sobel_getter = function(data, indices) {
 ```
 
 ```{r}
+set.seed(1)
 boot_results = boot(statistic=sobel_getter, data=learned_and_features_d, R=1000)
 boot.ci(boot_results)
 ```
@@ -432,3 +433,75 @@ summary(simil_init_S)
 ```
 
 No, it appears to really be a key feature (although it's not explaining the full effect, possibly because of time-slicing rather than taking the full trajectory?)
+
+# Can we get more precise about the relationships between these learning features?
+
+```{r}
+learning_features_d = d %>%
+  filter(nonlinear, num_layers==3, epoch %% 500 == 0) %>%
+  left_join(sv_d %>%
+              filter(mode_rank==0, epoch %% 500 == 0)) %>%
+  filter(!is.na(S)) %>% # the other datasets haven't been completed/we don't want the predictivity estimates to be skewed.
+  left_join(part_summarized_simil_d %>% 
+              filter(epoch %% 500 == 0) %>%
+              select(-mean_abs_cosine) %>%
+              mutate(type=paste("cosine_distance_", type, sep="")) %>%
+              spread(type, mean_cosine_distance)) %>%
+  left_join(part_summarized_proj_d %>%
+              filter(mode_rank==0, epoch %% 500 == 0)) %>%
+  group_by(run, analogous) %>%
+  mutate(S_z = scale(S),
+         norm_S_z = scale(norm_S),
+         abs_proj_diff_z = scale(abs_proj_diff),
+         cosine_distance_between_analog_z = scale(cosine_distance_between_analog),
+         d1_MSE_z = scale(d1_MSE)) %>%
+  ungroup()
+```
+
+```{r}
+lag_vars = function(vars_to_lag, lags, grouping_vars, data) {
+  res_data = data %>% 
+    gather(variable, value, one_of(vars_to_lag)) %>%
+    group_by_at(vars(one_of(c("variable", grouping_vars))))
+  for (l in lags) {
+    res_data = res_data %>%
+      mutate(!!(sprintf("lag_%i", l)) := lag(value, l))
+  }
+  res_data = res_data %>%
+    ungroup() %>%
+    rename(lag_none=value) %>%
+    gather(lag, value, starts_with("lag")) %>%
+    unite(var_and_lag, variable, lag) %>%
+    mutate(var_and_lag = str_replace(var_and_lag, "_lag_none", "")) %>%
+    spread(var_and_lag, value)
+    
+  return(res_data)
+}
+```
+
+```{r}
+predictivity_getter = function(var_A, var_B, grouping_vars, lag, data) {
+  lagged_var_B = sprintf("%s_lag", var_B)
+  formula = sprintf("%s ~ %s + (1|run)", var_A, lagged_var_B, lag) # there are issues with the choice of including a random effect of run
+                                                            # but the issues with not including it seem worse, since the predictor
+                                                            # of real interest (analogous) is independent of run.
+  this_data = data %>% # this awkward step prevents lagging across run boundaries
+    group_by_at(vars(one_of(grouping_vars))) %>%
+    mutate(!!lagged_var_B := lag(!!sym(var_B), lag)) %>%
+    ungroup()
+  res = lmer(formula, this_data)
+  return(res@beta[2])
+}
+predictivity_getter("S_z", "cosine_distance_between_analog_z", c("run", "analogous"), 1, learning_features_d)
+```
+
+```{r testing functions, eval=F}
+dummy_d = data.frame(blah=rep(c("A", "B"), each=5),
+                     time=rep(1:5, 2),
+                     x=rnorm(10)) %>%
+  group_by(blah) %>%
+  mutate(y = ifelse(is.na(lag(x, 1)), rnorm(1), lag(x, 1) + rnorm(1, sd=0.1))) %>%
+  ungroup()
+dummy_d
+lag_vars(c("x","y"), 0:2, c("blah"), dummy_d)
+```
