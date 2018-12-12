@@ -12,7 +12,7 @@ library(lmerTest)
 # load data
 ```{r}
 num_runs = 500
-num_layerss = 2:4
+num_layerss = c(3)
 ```
 
 ```{r message=F, warning=F}
@@ -20,8 +20,8 @@ d = data.frame()
 for (run_i in 0:(num_runs-1)) {
   for (num_layers in num_layerss) {
     for (analogous in 0:1) {
-      for (nonlinear in 0:1) {
-        filename = sprintf("results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_loss_track.csv",
+      for (nonlinear in c(1)) {
+        filename = sprintf("eight_things_results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_loss_track.csv",
                            num_layers, nonlinear, analogous, run_i)
         if (!file.exists(filename)) {
           next
@@ -58,7 +58,7 @@ ggplot(data=d, aes(x=epoch, y=d1_MSE, color=analogous)) +
 ```
 
 ```{r}
-ggsave("plots/basic_transfer_comparison.png", width=8, height=4)
+ggsave("plots/eight_things_transfer_comparison.png", width=8, height=4)
 ```
 
 ```{r}
@@ -71,7 +71,7 @@ learned_d = d %>%
 
 
 ```{r}
-model = lmer(learned_epoch ~ analogous  * nonlinear + (1 | run), learned_d %>% filter(num_layers==3))
+model = lmer(learned_epoch ~ analogous  + (1 | run), learned_d %>% filter(num_layers==3))
 
 summary(model)
 ```
@@ -88,7 +88,7 @@ ggplot(learned_d %>% filter(nonlinear, num_layers==3), aes(x=learned_epoch, colo
   facet_grid(. ~ num_layers, scales="free")
 ```
 ```{r}
-ggsave("plots/basic_transfer_stopping_times.png", width=8, height=4)
+ggsave("plots/et_transfer_stopping_times.png", width=8, height=4)
 ```
 
 
@@ -100,7 +100,7 @@ ggplot(learned_diff_d %>% filter(nonlinear, num_layers==3), aes(x=learn_diff)) +
 ```
 
 ```{r}
-ggsave("plots/basic_transfer_stopping_time_differences.png", width=8, height=4)
+ggsave("plots/et_transfer_stopping_time_differences.png", width=8, height=4)
 ```
 
 
