@@ -12,81 +12,53 @@ eta_decay = 1.0 #multiplicative per eta_decay_epoch epochs
 eta_decay_epoch = 10
 nepochs = 200000
 termination_thresh = 0.01 # stop at this loss
-nruns = 200
+nruns = 500
 run_offset = 0
-num_inputs = 6
-num_outputs = 8
-num_hidden = 6
+num_hidden = 10 
 save_detailed = False # currently most useful for 3 layer, saves detailed info
                       # about the evolution of the penultimate weights and reps.
 save_summarized_detailed = True # same but saves a less ridiculous amount of data
 ###################################
-nonlinearity_function = tf.nn.relu
+nonlinearity_function = tf.nn.leaky_relu
 
-structure_1 = np.array( 
-    [[1, 1, 0, 0],
-     [1, 0, 1, 0],
-     [1, 0, 0, 1]])
+eight_things_data = np.loadtxt("AllEightB.txt", dtype=np.float32)[:8, :]
+print(eight_things_data)
+num_inputs_per, num_outputs_per = eight_things_data.shape
 
-rt_3 = np.sqrt(3)
-rt_2 = np.sqrt(2)
+# now create a scrambled version with output unit variance preserved.
+np.random.seed(1)
+scramble_cols = np.concatenate([i*np.ones(num_inputs_per, dtype=np.int) for i in range(num_outputs_per)])
+scramble_rows = np.concatenate([np.random.permutation(num_inputs_per) for i in range(num_outputs_per)])
+scrambled_eight_things_data = eight_things_data[scramble_rows, scramble_cols].reshape([num_inputs_per, num_outputs_per], order='F') 
+print(scrambled_eight_things_data)
 
-structure_2 = np.array(
-    [[2, 0, 0, 0],
-    [0, 1./rt_2, 1./rt_2, 0],
-    [0, 0, 0, 1]])
+print(np.sum(eight_things_data, axis=0))
+print(np.sum(scrambled_eight_things_data, axis=0))
+x_data = np.eye(2*num_inputs_per) 
+print(x_data)
 
-sigma_31 = block_diag(structure_1, structure_1) 
+y_data = block_diag(eight_things_data, eight_things_data)
+y_data_no = block_diag(eight_things_data, scrambled_eight_things_data)
 
-sigma_31_no = block_diag(structure_1, structure_2) 
+y_datasets = [y_data, y_data_no]
+
+print(y_data)
+print(y_data_no)
+
+np.savetxt("no_analogy_data.csv", y_data_no, delimiter=',')
+np.savetxt("analogy_data.csv", y_data, delimiter=',')
+
+num_inputs = 2*num_inputs_per
+num_outputs = 2*num_outputs_per
+
 
 for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
-    np.random.seed(rseed)
-
-    _, S1, V1 = np.linalg.svd(sigma_31[:num_inputs//2, :num_outputs//2], full_matrices=False)
-    struct = random_orthogonal(num_inputs//2)
-    U = block_diag(struct, struct)
-    S = block_diag(np.diag(S1), np.diag(S1))
-    V = block_diag(V1, V1)
-    sigma_31 = np.matmul(U, np.matmul(S, V))
-    _, S, V = np.linalg.svd(sigma_31, full_matrices=False)
-    print(sigma_31)
-    print(S)
-
-#    _, S1, V1 = np.linalg.svd(sigma_31_no[:num_inputs//2, :num_outputs//2], full_matrices=False)
-    _, S2, V2 = np.linalg.svd(sigma_31_no[num_inputs//2:, num_outputs//2:], full_matrices=False)
-    U = block_diag(struct, random_orthogonal(num_inputs//2)) 
-    S = block_diag(np.diag(S1), np.diag(S2))
-    V = block_diag(V1, V2)
-    sigma_31_no = np.matmul(U, np.matmul(S, V))
-    _, S, V = np.linalg.svd(sigma_31_no, full_matrices=False)
-    print()
-    print(sigma_31_no)
-    print(S)
-
-
-    x_struct = random_orthogonal(num_inputs//2)
-    x_data = block_diag(x_struct, x_struct) 
-    print(x_data)
-
-    y_data = np.matmul(x_data.transpose(), sigma_31)
-    y_data_no = np.matmul(x_data.transpose(), sigma_31_no)
-
-    y_datasets = [y_data, y_data_no]
-
-    print(y_data)
-    print(y_data_no)
-    if rseed == 0:
-        np.savetxt("no_analogy_data.csv", y_data_no, delimiter=',')
-        np.savetxt("analogy_data.csv", y_data, delimiter=',')
-
     for nonlinear in [True]:
-        nonlinearity_function = tf.nn.leaky_relu
         for nlayer in [3]: #[3]: #
             for analogous in [0, 1]:
                 num_hidden = num_hidden
                 print "nlayer %i nonlinear %i analogous %i run %i" % (nlayer, nonlinear, analogous, rseed)
-                filename_prefix = "results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_" %(nlayer,nonlinear,analogous,rseed)
+                filename_prefix = "eight_things_results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_" %(nlayer,nonlinear,analogous,rseed)
 
                 np.random.seed(rseed)
                 tf.set_random_seed(rseed)
@@ -193,7 +165,7 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                     W, b = hidden_weights[-1]
                     U, S, _ = np.linalg.svd(sess.run(W), full_matrices=False)
                     simils = squareform(pdist(reps, metric='cosine')) 
-                    reps /= np.sqrt(np.sum(np.square(reps), axis=-1))
+                    reps /= np.sqrt(np.sum(np.square(reps), axis=-1, keepdims=True))
                     projs = np.matmul(reps, U)
                     sout, svout, pout = outfiles
                     for i in range(num_inputs-1):
@@ -235,7 +207,7 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                             curr_mse = test_accuracy()
                             print "epoch: %i, MSEs: %f, %f" %(epoch, curr_mse[0], curr_mse[1])	
                             fout.write("%i, %f, %f\n" %(epoch, curr_mse[0], curr_mse[1]))
-                            if curr_mse[0] < termination_thresh:
+                            if curr_mse[1] < termination_thresh:
                                 print("Early stop!")
                                 break
 #                            if epoch % 100 == 0:
