@@ -84,7 +84,7 @@ learned_diff_d = learned_d %>%
 
 ```{r}
 ggplot(learned_d %>% filter(nonlinear, num_layers==3), aes(x=learned_epoch, color=analogous)) +
-  geom_line(stat="density") +
+  geom_line(stat="density", adjust=0.2) +
   facet_grid(. ~ num_layers, scales="free")
 ```
 ```{r}
@@ -185,18 +185,23 @@ for (run_i in detailed_runs) {
 ```{r}
 part_summarized_proj_d = proj_d %>%
   mutate(mode_rank = mode_j,
-         abs_projection=projection) %>%
-  select(-projection) %>%
-  spread(rep_i, abs_projection) %>%
+         abs_proj=abs(projection)) %>%
+  gather(measurement, value, projection, abs_proj) %>%
+  unite(type_and_index, measurement, rep_i) %>%
+  spread(type_and_index, value) %>%
   group_by(run, analogous, epoch, mode_rank) %>%
-  summarize(abs_proj_1 = `0` + `1` + `2`,
-            abs_proj_2 = `3` + `4` + `5`,
-            abs_proj_diff = abs(abs_proj_1 - abs_proj_2)) %>% # how much is the mode biased towards one domain?
+  summarize(d1_abs_proj = abs_proj_0 + abs_proj_1 + abs_proj_2,
+            d2_abs_proj = abs_proj_3 + abs_proj_4 + abs_proj_5,
+            abs_proj_diff = abs(d1_abs_proj - d2_abs_proj),# how much is the mode biased towards one domain?
+            proj_dot = projection_0 * projection_3 + projection_1 * projection_4 + projection_2 * projection_5, # an un-normalized inner product
+            abs_proj_dot = abs(proj_dot)) %>% 
   ungroup() 
 
 summarized_proj_d = part_summarized_proj_d %>%
   group_by(analogous, epoch, mode_rank) %>%
-  summarize(mean_abs_proj_diff = mean(abs_proj_diff), sd_abs_proj_diff = sd(abs_proj_diff))
+  summarize(mean_abs_proj_diff = mean(abs_proj_diff), sd_abs_proj_diff = sd(abs_proj_diff),
+            mean_proj_dot = mean(proj_dot),
+            mean_abs_proj_dot = mean(abs_proj_dot))
 
 final_proj_d = part_summarized_proj_d %>%
   group_by(run, analogous, mode_rank) %>%
@@ -204,11 +209,10 @@ final_proj_d = part_summarized_proj_d %>%
   ungroup()
 
 early_proj_d = part_summarized_proj_d %>%
-  group_by(run, analogous, mode_rank) %>%
   filter(epoch == 5000) %>%
-  ungroup() %>%
-  select(-abs_proj_1, -abs_proj_2, -epoch) %>%
-  rename(early_abs_proj_diff=abs_proj_diff)
+  select(-d1_abs_proj, -d2_abs_proj, -epoch) %>%
+  rename(early_abs_proj_diff=abs_proj_diff, early_proj_dot=proj_dot,
+         early_abs_proj_dot=abs_proj_dot)
   
 
 ```
@@ -222,6 +226,28 @@ ggplot(summarized_proj_d %>% filter(mode_rank < 2), aes(x=epoch, y=mean_abs_proj
 
 ```{r}
 ggplot(final_proj_d, aes(x=abs_proj_diff, color=analogous)) +
+  geom_density() +
+  scale_color_brewer(palette="Set1") +
+  facet_grid(~mode_rank)
+```
+
+```{r}
+ggplot(summarized_proj_d %>% filter(mode_rank < 2), aes(x=epoch, y=mean_proj_dot, color=analogous)) +
+  geom_line() +
+  scale_color_brewer(palette="Set1") +
+  facet_grid(~mode_rank)
+```
+
+
+```{r}
+ggplot(summarized_proj_d %>% filter(mode_rank < 2), aes(x=epoch, y=log(mean_abs_proj_dot), color=analogous)) +
+  geom_line() +
+  scale_color_brewer(palette="Set1") +
+  facet_grid(~mode_rank)
+```
+
+```{r}
+ggplot(final_proj_d, aes(x=log(abs_proj_dot), color=analogous)) +
   geom_density() +
   scale_color_brewer(palette="Set1") +
   facet_grid(~mode_rank)
@@ -432,7 +458,12 @@ simil_init_S = lmer(S ~  early_cosine_distance_between_analog + initial_cosine_d
 summary(simil_init_S)
 ```
 
-No, it appears to really be a key feature (although it's not explaining the full effect, possibly because of time-slicing rather than taking the full trajectory?)
+No, it appears to really be a key feature, although actually it's not explaining much of the analogy effect at all.
+
+```{r}
+analogy_S = lmer(S ~  analogous + (1|run), learned_and_features_d)
+summary(analogy_S)
+```
 
 # Can we get more precise about the relationships between these learning features?
 
@@ -449,13 +480,16 @@ learning_features_d = d %>%
               spread(type, mean_cosine_distance)) %>%
   left_join(part_summarized_proj_d %>%
               filter(mode_rank==0, epoch %% 500 == 0)) %>%
-  group_by(run, analogous) %>%
+#  group_by(run, analogous) %>%
   mutate(S_z = scale(S),
          norm_S_z = scale(norm_S),
          abs_proj_diff_z = scale(abs_proj_diff),
+         log_abs_proj_dot_z = scale(log(abs_proj_dot)), 
          cosine_distance_between_analog_z = scale(cosine_distance_between_analog),
-         d1_MSE_z = scale(d1_MSE)) %>%
-  ungroup()
+         cosine_distance_between_nonanalog_z = scale(cosine_distance_between_nonanalog),
+         cosine_distance_within_d1_z = scale(cosine_distance_within_d1),
+         d1_MSE_z = scale(d1_MSE))# %>%
+#  ungroup()
 ```
 Lag variables within the data
 ```{r}
@@ -481,22 +515,22 @@ lag_vars = function(vars_to_lag, lags, grouping_vars, data) {
 
 ```{r}
 predictivity_getter = function(var_Y, var_X, data) {
-  ## this makes no difference if we're z-scoring within run
-  # formula = sprintf("%s ~ %s + (1|run)", var_Y, var_X) # there are issues with the choice of including a random effect of run
-  #                                                      # but the issues with not including it seem worse, since the predictor
-  #                                                      # of real interest (analogous) is independent of run.
-  # res = lmer(formula, data)
-  # return(res@beta[2])
+  formula = sprintf("%s ~ %s + (1|run)", var_Y, var_X) # there are issues with the choice of including a random effect of run
+                                                       # but the issues with not including it seem worse, since the predictor
+                                                       # of real interest (analogous) is independent of run.
+  res = lmer(formula, data)
+  return(res@beta[2])
   
-  formula = sprintf("%s ~ %s", var_Y, var_X) 
-  res = lm(formula, data)
-  return(res$coefficients[2])
+  # formula = sprintf("%s ~ %s", var_Y, var_X)
+  # res = lm(formula, data)
+  # return(res$coefficients[2])
 }
 ```
 
 Generate plots
 ```{r}
-generate_lagged_predictivity_plots = function(vars_of_interest, lags, data) {
+generate_lagged_predictivity_plots = function(vars_of_interest, lags, grouping_vars, data) {
+  data = lag_vars(vars_of_interest, lags, grouping_vars, data)  
   plot_d = data.frame()
   for (var_Y in vars_of_interest) {
     for (var_X in vars_of_interest) {
@@ -511,11 +545,16 @@ generate_lagged_predictivity_plots = function(vars_of_interest, lags, data) {
     }
   }
   
-  p = ggplot(plot_d, aes(x=lag, y=abs(predictivity))) +
+  p = ggplot(plot_d, aes(x=lag, y=predictivity)) +
     geom_line() +
     geom_point() +
     scale_x_continuous(breaks=lags) +
-    facet_grid(var_Y ~ var_X)
+    scale_y_continuous(breaks=-1:1) +
+    ylim(-1.1, 1.1) +
+    geom_hline(yintercept = 0, alpha=0.2, linetype=2) +
+    geom_hline(yintercept = 1, alpha=0.2, linetype=2) +
+    geom_hline(yintercept = -1, alpha=0.2, linetype=2) +
+    facet_grid(var_X ~ var_Y)
   return(p)
 }
 ```
@@ -531,5 +570,20 @@ dummy_d
 dummy_d_lagged = lag_vars(c("x","y"), 0:2, c("run"), dummy_d)
 predictivity_getter("y", "x", dummy_d_lagged)
 predictivity_getter("y", "x_lag_1", dummy_d_lagged)
-generate_lagged_predictivity_plots(c("y","x"), 0:2, dummy_d_lagged)
+generate_lagged_predictivity_plots(c("y","x"), 0:2, c("run"), dummy_d)
 ```
+```{r}
+vars_of_interest = c("d1_MSE_z", "S_z", "log_abs_proj_dot_z", "cosine_distance_between_analog_z", "cosine_distance_between_nonanalog_z", "cosine_distance_within_d1_z")
+grouping_vars = c("run", "analogous")
+lags = 0:10
+
+p = generate_lagged_predictivity_plots(vars_of_interest, lags, grouping_vars, learning_features_d)
+p + 
+  labs(x="Lag (*500 epochs)", y="Correlation")
+```
+```{r}
+ggsave("plots/time_correlation_predictivity.png", width=12, height=9)
+```
+
+
+
