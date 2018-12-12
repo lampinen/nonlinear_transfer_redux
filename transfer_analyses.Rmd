@@ -37,7 +37,7 @@ for (run_i in 0:(num_runs-1)) {
 
 ```{r}
 d = d %>%
-  filter((num_layers==5 & epoch %% 500 == 0) | (num_layers==4 & epoch %% 200 == 0) | (num_layers == 3 & epoch %% 50 == 0) | num_layers == 2) %>%
+  filter((num_layers==5 & epoch %% 500 == 0) | (num_layers==4 & epoch %% 200 == 0) | (num_layers == 3 & epoch %% 10 == 0) | num_layers == 2) %>%
   complete(run, analogous, nesting(nonlinear, num_layers, epoch), fill=list(MSE=0, d1_MSE=0)) 
 ```
 
@@ -84,7 +84,7 @@ learned_diff_d = learned_d %>%
 
 ```{r}
 ggplot(learned_d %>% filter(nonlinear, num_layers==3), aes(x=learned_epoch, color=analogous)) +
-  geom_line(stat="density", adjust=0.2) +
+  geom_line(stat="density", adjust=1) +
   facet_grid(. ~ num_layers, scales="free")
 ```
 ```{r}
