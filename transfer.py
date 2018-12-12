@@ -20,25 +20,29 @@ save_detailed = False # currently most useful for 3 layer, saves detailed info
 save_summarized_detailed = True # same but saves a less ridiculous amount of data
 ###################################
 nonlinearity_function = tf.nn.leaky_relu
+num_inputs_per = 4
+num_outputs_per = 2
 
-eight_things_data = np.loadtxt("AllEightB.txt", dtype=np.float32)[:8, :]
-print(eight_things_data)
-num_inputs_per, num_outputs_per = eight_things_data.shape
 
-# now create a scrambled version with output unit variance preserved.
-np.random.seed(1)
-scramble_cols = np.concatenate([i*np.ones(num_inputs_per, dtype=np.int) for i in range(num_outputs_per)])
-scramble_rows = np.concatenate([np.random.permutation(num_inputs_per) for i in range(num_outputs_per)])
-scrambled_eight_things_data = eight_things_data[scramble_rows, scramble_cols].reshape([num_inputs_per, num_outputs_per], order='F') 
-print(scrambled_eight_things_data)
+binary_x_data = np.array([[0,0],
+                          [0,1],
+                          [1,0],
+                          [1,1]])
 
-print(np.sum(eight_things_data, axis=0))
-print(np.sum(scrambled_eight_things_data, axis=0))
-x_data = np.eye(2*num_inputs_per) 
-print(x_data)
+x_data = block_diag(binary_x_data, binary_x_data)
 
-y_data = block_diag(eight_things_data, eight_things_data)
-y_data_no = block_diag(eight_things_data, scrambled_eight_things_data)
+XOR_data = np.array([[0],
+                     [1],
+                     [1],
+                     [0]])
+
+AND_data = np.array([[0],
+                     [0],
+                     [0],
+                     [1]])
+
+y_data = block_diag(XOR_data, XOR_data)
+y_data_no = block_diag(XOR_data, AND_data)
 
 y_datasets = [y_data, y_data_no]
 
