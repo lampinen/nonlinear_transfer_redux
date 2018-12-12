@@ -20,8 +20,8 @@ save_detailed = False # currently most useful for 3 layer, saves detailed info
 save_summarized_detailed = True # same but saves a less ridiculous amount of data
 ###################################
 nonlinearity_function = tf.nn.leaky_relu
-num_inputs_per = 4
-num_outputs_per = 2
+num_inputs_per = 2
+num_outputs_per = 1
 
 
 binary_x_data = np.array([[0,0],
@@ -54,6 +54,8 @@ np.savetxt("analogy_data.csv", y_data, delimiter=',')
 
 num_inputs = 2*num_inputs_per
 num_outputs = 2*num_outputs_per
+num_examples_per = len(binary_x_data)
+num_examples = len(x_data)
 
 
 for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
@@ -62,7 +64,7 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
             for analogous in [0, 1]:
                 num_hidden = num_hidden
                 print "nlayer %i nonlinear %i analogous %i run %i" % (nlayer, nonlinear, analogous, rseed)
-                filename_prefix = "eight_things_results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_" %(nlayer,nonlinear,analogous,rseed)
+                filename_prefix = "XOR_results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_" %(nlayer,nonlinear,analogous,rseed)
 
                 np.random.seed(rseed)
                 tf.set_random_seed(rseed)
@@ -114,11 +116,11 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                 def test_accuracy():
                     MSE = sess.run(loss,
                                    feed_dict={input_ph: this_x_data,target_ph: this_y_data})
-                    MSE /= num_inputs 
+                    MSE /= num_examples 
 
                     d1_MSE = sess.run(d1_loss,
                                    feed_dict={input_ph: this_x_data,target_ph: this_y_data})
-                    d1_MSE /= num_inputs 
+                    d1_MSE /= num_examples_per 
                     return MSE, d1_MSE
 
 
@@ -172,14 +174,14 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                     reps /= np.sqrt(np.sum(np.square(reps), axis=-1, keepdims=True))
                     projs = np.matmul(reps, U)
                     sout, svout, pout = outfiles
-                    for i in range(num_inputs-1):
-                        for j in range(i+1, num_inputs):
+                    for i in range(num_examples-1):
+                        for j in range(i+1, num_examples):
                             sout.write("%i, %i, %i, %f\n" % (epoch, i, j, simils[i, j]))
 
                     for i in range(len(S)):
                         svout.write("%i, %i, %f\n" % (epoch, i, S[i]))
 
-                    for i in range(num_inputs):
+                    for i in range(num_examples):
                         for j in range(num_hidden):
                             pout.write("%i, %i, %i, %f\n" % (epoch, i, j, projs[i, j]))
 
