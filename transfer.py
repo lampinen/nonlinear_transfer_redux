@@ -22,7 +22,7 @@ save_summarized_detailed = True # same but saves a less ridiculous amount of dat
 nonlinearity_function = tf.nn.leaky_relu
 
 eight_things_data = np.loadtxt("AllEightB.txt", dtype=np.float32)[:8, :]
-print(eight_things_data)
+print(eight_things_data.shape)
 num_inputs_per, num_outputs_per = eight_things_data.shape
 
 # now create a scrambled version with output unit variance preserved.
@@ -51,7 +51,6 @@ np.savetxt("analogy_data.csv", y_data, delimiter=',')
 num_inputs = 2*num_inputs_per
 num_outputs = 2*num_outputs_per
 
-
 for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
     for nonlinear in [True]:
         for nlayer in [3]: #[3]: #
@@ -64,6 +63,7 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                 tf.set_random_seed(rseed)
                 this_x_data = x_data
                 this_y_data = y_datasets[analogous] 
+                print(this_y_data)
 
                 input_ph = tf.placeholder(tf.float32, shape=[None, num_inputs])
                 target_ph = tf.placeholder(tf.float32, shape=[None, num_outputs])
@@ -95,8 +95,9 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                 else:
                     output = pre_output
 
-                loss = tf.reduce_sum(tf.square(output - target_ph))# +0.05*(tf.nn.l2_loss(internal_rep))
-                d1_loss = tf.reduce_sum(tf.square(output[:3, :4] - target_ph[:3, :4]))
+                d1_loss = tf.reduce_sum(tf.square(output[:8, :34] - target_ph[:8, :34]))
+                d2_loss = tf.reduce_sum(tf.square(output[8:, 34:] - target_ph[8, 34:]))
+                loss =  d1_loss + d2_loss
                 output_grad = tf.gradients(loss,[output])[0]
                 eta_ph = tf.placeholder(tf.float32)
                 optimizer = tf.train.GradientDescentOptimizer(eta_ph)
@@ -113,8 +114,8 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                     MSE /= num_inputs 
 
                     d1_MSE = sess.run(d1_loss,
-                                   feed_dict={input_ph: this_x_data,target_ph: this_y_data})
-                    d1_MSE /= num_inputs 
+                                      feed_dict={input_ph: this_x_data,target_ph: this_y_data})
+                    d1_MSE /= num_inputs_per 
                     return MSE, d1_MSE
 
 
