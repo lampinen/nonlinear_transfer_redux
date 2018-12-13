@@ -44,7 +44,7 @@ AND_data = np.array([[0],
 y_data = block_diag(XOR_data, XOR_data)
 y_data_no = block_diag(XOR_data, AND_data)
 
-y_datasets = [y_data, y_data_no]
+y_datasets = [y_data_no, y_data]
 
 print(y_data)
 print(y_data_no)
@@ -101,8 +101,9 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                 else:
                     output = pre_output
 
-                loss = tf.reduce_sum(tf.square(output - target_ph))# +0.05*(tf.nn.l2_loss(internal_rep))
-                d1_loss = tf.reduce_sum(tf.square(output[:3, :4] - target_ph[:3, :4]))
+                d1_loss = tf.reduce_sum(tf.square(output[:num_examples_per, :num_outputs_per] - target_ph[:num_examples_per, :num_outputs_per]))
+                d2_loss = tf.reduce_sum(tf.square(output[num_examples_per:, num_outputs_per:] - target_ph[num_examples_per:, num_outputs_per:]))
+                loss = d1_loss + d2_loss
                 output_grad = tf.gradients(loss,[output])[0]
                 eta_ph = tf.placeholder(tf.float32)
                 optimizer = tf.train.GradientDescentOptimizer(eta_ph)
