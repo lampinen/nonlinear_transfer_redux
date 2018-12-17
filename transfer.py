@@ -10,11 +10,11 @@ from orthogonal_matrices import random_orthogonal
 init_eta = 0.005
 eta_decay = 1.0 #multiplicative per eta_decay_epoch epochs
 eta_decay_epoch = 10
-nepochs = 200000
+nepochs = 100000
 termination_thresh = 0.01 # stop at this loss
 nruns = 500
 run_offset = 0
-num_hidden = 10 
+num_hidden = 4
 save_detailed = False # currently most useful for 3 layer, saves detailed info
                       # about the evolution of the penultimate weights and reps.
 save_summarized_detailed = True # same but saves a less ridiculous amount of data
@@ -22,7 +22,6 @@ save_summarized_detailed = True # same but saves a less ridiculous amount of dat
 nonlinearity_function = tf.nn.leaky_relu
 num_inputs_per = 2
 num_outputs_per = 1
-
 
 binary_x_data = np.array([[0,0],
                           [0,1],
@@ -44,7 +43,7 @@ AND_data = np.array([[0],
 y_data = block_diag(XOR_data, XOR_data)
 y_data_no = block_diag(XOR_data, AND_data)
 
-y_datasets = [y_data_no, y_data]
+y_datasets = [y_data_no, y_data, y_data_no] # for the third case, just won't train
 
 print(y_data)
 print(y_data_no)
@@ -61,10 +60,10 @@ num_examples = len(x_data)
 for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
     for nonlinear in [True]:
         for nlayer in [3]: #[3]: #
-            for analogous in [0, 1]:
+            for analogous in [1, 0, 2]:
                 num_hidden = num_hidden
                 print "nlayer %i nonlinear %i analogous %i run %i" % (nlayer, nonlinear, analogous, rseed)
-                filename_prefix = "XOR_results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_" %(nlayer,nonlinear,analogous,rseed)
+                filename_prefix = "XOR_results_2/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_" %(nlayer,nonlinear,analogous,rseed)
 
                 np.random.seed(rseed)
                 tf.set_random_seed(rseed)
@@ -107,7 +106,10 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                 output_grad = tf.gradients(loss,[output])[0]
                 eta_ph = tf.placeholder(tf.float32)
                 optimizer = tf.train.GradientDescentOptimizer(eta_ph)
-                train = optimizer.minimize(loss)
+                if analogous < 2:
+                    train = optimizer.minimize(loss)
+                else:
+                    train = optimizer.minimize(d1_loss) # only train on one task
 
                 init = tf.global_variables_initializer()
 
