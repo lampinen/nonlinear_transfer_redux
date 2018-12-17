@@ -166,8 +166,11 @@ part_summarized_proj_d = proj_d %>%
   group_by(run, analogous, epoch, mode_rank) %>%
   summarize(d1_abs_proj = abs_proj_0 + abs_proj_1 + abs_proj_2 + abs_proj_3,
             d2_abs_proj = abs_proj_4 + abs_proj_5 + abs_proj_6 + abs_proj_7,
+            d1_norm_proj = sqrt(sum(c(projection_0, projection_1, projection_2, projection_3)^2)), 
             abs_proj_diff = abs(d1_abs_proj - d2_abs_proj) ,# how much is the mode biased towards one domain?
             proj_dot = projection_0 * projection_4 + projection_1 * projection_5 + projection_2 * projection_6 + projection_3 * projection_7, # an un-normalized inner product, ignores other analogies
+            proj_AND = abs(drop(c(projection_0, projection_1, projection_2, projection_3) %*% c(-1, -1, -1, 1)))/(2*d1_norm_proj),
+            proj_OR = abs(drop(c(projection_0, projection_1, projection_2, projection_3) %*% c(-1, 1, 1, 1)))/(2*d1_norm_proj),
             abs_proj_dot = abs(proj_dot)) %>% 
   ungroup() 
 
@@ -175,6 +178,8 @@ summarized_proj_d = part_summarized_proj_d %>%
   group_by(analogous, epoch, mode_rank) %>%
   summarize(mean_abs_proj_diff = mean(abs_proj_diff), sd_abs_proj_diff = sd(abs_proj_diff),
             mean_proj_dot = mean(proj_dot),
+            mean_proj_AND = mean(proj_AND),
+            mean_proj_OR = mean(proj_OR),
             mean_abs_proj_dot = mean(abs_proj_dot))
 
 final_proj_d = part_summarized_proj_d %>%
@@ -186,7 +191,8 @@ early_proj_d = part_summarized_proj_d %>%
   filter(epoch == early_epoch) %>%
   select(-d1_abs_proj, -d2_abs_proj, -epoch) %>%
   rename(early_abs_proj_diff=abs_proj_diff, early_proj_dot=proj_dot,
-         early_abs_proj_dot=abs_proj_dot)
+         early_abs_proj_dot=abs_proj_dot,
+         early_proj_AND=proj_AND, early_proj_OR=proj_OR)
   
 
 ```
@@ -206,12 +212,41 @@ ggplot(final_proj_d, aes(x=log(abs_proj_diff), color=analogous)) +
 ```
 
 ```{r}
+ggplot(final_proj_d %>%
+         filter(mode_rank < 2), aes(x=log(proj_AND), color=analogous)) +
+  geom_density() +
+  scale_color_brewer(palette="Set1") +
+  facet_grid(~mode_rank)
+```
+
+```{r}
+ggplot(final_proj_d %>%
+         filter(mode_rank < 2), aes(x=log(proj_OR), color=analogous)) +
+  geom_density() +
+  scale_color_brewer(palette="Set1") +
+  facet_grid(~mode_rank)
+```
+
+```{r}
 ggplot(summarized_proj_d %>% filter(mode_rank < 5), aes(x=epoch, y=mean_proj_dot, color=analogous)) +
   geom_line() +
   scale_color_brewer(palette="Set1") +
   facet_grid(~mode_rank)
 ```
 
+```{r}
+ggplot(summarized_proj_d %>% filter(mode_rank < 4), aes(x=epoch, y=mean_proj_AND, color=analogous)) +
+  geom_line() +
+  scale_color_brewer(palette="Set1") +
+  facet_grid(~mode_rank)
+```
+
+```{r}
+ggplot(summarized_proj_d %>% filter(mode_rank < 4), aes(x=epoch, y=mean_proj_OR, color=analogous)) +
+  geom_line() +
+  scale_color_brewer(palette="Set1") +
+  facet_grid(~mode_rank)
+```
 
 ```{r}
 ggplot(summarized_proj_d %>% filter(mode_rank < 2), aes(x=epoch, y=log(mean_abs_proj_dot), color=analogous)) +
@@ -345,24 +380,29 @@ learned_and_features_d = learned_d %>%
               spread(type, mean_cosine_distance)) %>%
   left_join(final_proj_d %>%
               filter(mode_rank==0)) %>%
+  left_join(final_proj_d %>%
+              filter(mode_rank==1) %>%
+              select(analogous, run, epoch, proj_AND, proj_OR) %>%
+              rename(mode_1_proj_AND=proj_AND,
+                     mode_1_proj_OR=proj_OR)) %>%
   left_join(early_proj_d %>%
               filter(mode_rank==0))
 ```
 
 ```{r}
-model_non_analogous = lmer(learned_epoch ~ S + cosine_distance_between_analog + cosine_distance_between_nonanalog + abs_proj_diff + (1 | run), learned_and_features_d)
+model_non_analogous = lmer(learned_epoch ~ S + cosine_distance_between_analog + cosine_distance_between_nonanalog + abs_proj_diff + proj_AND + proj_OR + mode_1_proj_AND  + mode_1_proj_OR  + (1 | run), learned_and_features_d)
 BIC(model_non_analogous)
 summary(model_non_analogous)
 ```
 
 ```{r}
-model = lmer(learned_epoch ~ analogous + S + cosine_distance_between_analog + cosine_distance_between_nonanalog + abs_proj_diff + (1 | run), learned_and_features_d)
+model = lmer(learned_epoch ~  S + cosine_distance_between_analog + cosine_distance_between_nonanalog +  (proj_AND  + proj_OR + mode_1_proj_AND + mode_1_proj_OR) * analogous  + (1 | run), learned_and_features_d)
 BIC(model)
 summary(model)
 ```
 
 ```{r}
-simple_model = lmer(learned_epoch ~ analogous + S + (1 | run), learned_and_features_d)
+simple_model = lmer(learned_epoch ~ analogous + (1 | run), learned_and_features_d)
 BIC(simple_model)
 summary(simple_model)
 ```
