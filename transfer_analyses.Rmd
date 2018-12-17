@@ -199,14 +199,14 @@ ggplot(summarized_proj_d %>% filter(mode_rank < 2), aes(x=epoch, y=mean_abs_proj
 ```
 
 ```{r}
-ggplot(final_proj_d, aes(x=abs_proj_diff, color=analogous)) +
+ggplot(final_proj_d, aes(x=log(abs_proj_diff), color=analogous)) +
   geom_density() +
   scale_color_brewer(palette="Set1") +
   facet_grid(~mode_rank)
 ```
 
 ```{r}
-ggplot(summarized_proj_d %>% filter(mode_rank < 2), aes(x=epoch, y=mean_proj_dot, color=analogous)) +
+ggplot(summarized_proj_d %>% filter(mode_rank < 5), aes(x=epoch, y=mean_proj_dot, color=analogous)) +
   geom_line() +
   scale_color_brewer(palette="Set1") +
   facet_grid(~mode_rank)
@@ -561,4 +561,30 @@ ggsave("plots/XOR_time_correlation_predictivity.png", width=12, height=9)
 ```
 
 
+# What are the actual computations being performed
 
+```{r}
+ggplot(data=simil_d %>%
+         group_by(analogous, run) %>%
+         filter(epoch == max(epoch)) %>%
+         ungroup() %>%
+         group_by(analogous, rep_i, rep_j) %>%
+         summarize(mean_cosine_similarity=mean(cosine_similarity))) +
+  geom_raster(aes(x=rep_i, y=rep_j, fill=mean_cosine_similarity)) +
+  geom_raster(aes(x=rep_j, y=rep_i, fill=mean_cosine_similarity)) +
+  facet_wrap(~analogous)
+```
+
+```{r}
+ggplot(data=proj_d %>%
+         filter(run < 4,
+                mode_j < 5) %>% # probably most the important computation is done in the first few modes?
+         group_by(analogous, run) %>%
+         filter(epoch == max(epoch)),
+       aes(x=rep_i, y=mode_j, fill=projection)) +
+  geom_raster() +
+  scale_y_discrete(breaks=0:9) +
+  facet_grid(run~analogous)
+```
+
+(Hard to summarize mode projections because taking the absolute value ignores important information, and even if we use better heuristics like ensuring the projection on the first item has the same sign, the computations being done are different enough that it seems worth keeping them separate.)
