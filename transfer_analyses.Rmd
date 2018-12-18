@@ -616,17 +616,19 @@ lagged_learning_features_d = lag_vars(c("d1_MSE", "mode_0_S", "mode_1_S", "mode_
   mutate(epoch_z = scale(epoch))
 ```
 
+Note that the below models fit the time-courses like crap, instead of polynomials in time should have mixture of decaying logistic functions or something.
+
 ```{r}
-simple_model = lmer(d1_MSE ~ analogous + epoch_z + I(epoch_z^2) + (1 + epoch_z + I(epoch_z^2) | run), lagged_learning_features_d)
+simple_model = lmer(d1_MSE ~ analogous + epoch_z + I(epoch_z^2) + I(epoch_z^3) + (1 + epoch_z + I(epoch_z^2)  + I(epoch_z^3)| run), lagged_learning_features_d)
 summary(simple_model)
 ```
 
 ```{r}
-lagged_model = lmer(d1_MSE ~ analogous + epoch_z + I(epoch_z^2) + mode_0_S_lag_5 + mode_1_S_lag_5 + mode_0_proj_AND_lag_5 + mode_1_proj_OR_lag_5 + (1 + epoch_z + I(epoch_z^2) | run), lagged_learning_features_d)
+lagged_model = lmer(d1_MSE ~ analogous + epoch_z + I(epoch_z^2)  + I(epoch_z^3)+ mode_0_S_lag_5 + mode_1_S_lag_5 + mode_0_proj_AND_lag_5 + mode_1_proj_OR_lag_5 + (1 + epoch_z + I(epoch_z^2) + I(epoch_z^3) | run), lagged_learning_features_d)
 summary(lagged_model)
 ```
 
-The benefits of analogy appear to be explained by these features! There's actually a *slowdown* when they are controlled for, probably due to the increased capacity relative to the computations in the none case...
+The benefits of analogy appear to be explained by these features! There's actually a (small) *slowdown* when they are controlled for, probably due to the increased capacity relative to the computations in the none case...
 
 # What are the actual computations being performed
 
