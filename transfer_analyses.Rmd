@@ -412,7 +412,7 @@ summary(model_non_analogous)
 ```
 
 ```{r}
-model = lmer(learned_epoch ~ mode_0_S + mode_1_S + early_proj_AND + early_mode_1_proj_OR + early_d1_abs_proj + analogous  + (1 | run), learned_and_features_d)
+model = lmer(learned_epoch ~ mode_0_S + mode_1_S + early_proj_AND + early_mode_1_proj_OR + analogous  + (1 | run), learned_and_features_d)
 BIC(model)
 summary(model)
 ```
@@ -485,21 +485,28 @@ summary(analogy_S)
 learning_features_d = d %>%
   filter(nonlinear, num_layers==3, epoch %% 200 == 0) %>%
   left_join(sv_d %>%
-              filter(mode_rank==0, epoch %% 200 == 0)) %>%
-  filter(!is.na(S)) %>% # the other datasets haven't been completed/we don't want the predictivity estimates to be skewed.
+              filter(mode_rank < 3, epoch %% 200 == 0) %>%
+              select(mode_rank, S, analogous, epoch, run) %>%
+              mutate(mode_rank = sprintf("mode_%i_S", mode_rank)) %>%
+              spread(mode_rank, S)) %>%
+  filter(!is.na(mode_0_S)) %>% # the other datasets haven't been completed/we don't want the predictivity estimates to be skewed.
   left_join(part_summarized_simil_d %>% 
               filter(epoch %% 200 == 0) %>%
               select(-mean_abs_cosine) %>%
               mutate(type=paste("cosine_distance_", type, sep="")) %>%
               spread(type, mean_cosine_distance)) %>%
   left_join(part_summarized_proj_d %>%
-              filter(mode_rank==0, epoch %% 200 == 0)) %>%
+              filter(mode_rank < 2, epoch %% 200 == 0) %>%
+              select(run, analogous, epoch, mode_rank, d1_abs_proj, abs_proj_diff, proj_AND, proj_OR) %>%
+              gather(measurement, value, contains("proj")) %>%
+              mutate(mode_and_measure=sprintf("mode_%i_%s", mode_rank, measurement)) %>%
+              select(-measurement, -mode_rank) %>%
+              spread(mode_and_measure, value)) %>%
 #  group_by(run, analogous) %>%
-  mutate(S_z = scale(S),
-         proj_AND_z = scale(proj_AND),
-         norm_S_z = scale(norm_S),
-         abs_proj_diff_z = scale(abs_proj_diff),
-         log_abs_proj_dot_z = scale(log(abs_proj_dot)), 
+  mutate(mode_0_S_z = scale(mode_0_S),
+         mode_1_S_z = scale(mode_1_S),
+         mode_0_proj_AND_z = scale(mode_0_proj_AND),
+         mode_1_proj_OR_z = scale(mode_1_proj_OR),
          cosine_distance_between_analog_z = scale(cosine_distance_between_analog),
          cosine_distance_between_nonanalog_z = scale(cosine_distance_between_nonanalog),
          cosine_distance_within_d1_z = scale(cosine_distance_within_d1),
@@ -588,7 +595,7 @@ predictivity_getter("y", "x_lag_1", dummy_d_lagged)
 generate_lagged_predictivity_plots(c("y","x"), 0:2, c("run"), dummy_d)
 ```
 ```{r}
-vars_of_interest = c("d1_MSE_z", "S_z", "proj_AND_z")
+vars_of_interest = c("d1_MSE_z", "mode_0_S_z", "mode_1_S_z", "mode_0_proj_AND_z", "mode_1_proj_OR_z")
 grouping_vars = c("run", "analogous")
 lags = 0:10
 
@@ -601,6 +608,25 @@ p +
 ggsave("plots/XOR_time_correlation_predictivity.png", width=12, height=9)
 ```
 
+## lets actually model
+
+```{r}
+lagged_learning_features_d = lag_vars(c("d1_MSE", "mode_0_S", "mode_1_S", "mode_0_proj_AND", "mode_1_proj_OR"), lags, grouping_vars, learning_features_d %>%
+                                        filter(analogous != "non-analogous")) %>%
+  mutate(epoch_z = scale(epoch))
+```
+
+```{r}
+simple_model = lmer(d1_MSE ~ analogous + epoch_z + I(epoch_z^2) + (1 + epoch_z + I(epoch_z^2) | run), lagged_learning_features_d)
+summary(simple_model)
+```
+
+```{r}
+lagged_model = lmer(d1_MSE ~ analogous + epoch_z + I(epoch_z^2) + mode_0_S_lag_5 + mode_1_S_lag_5 + mode_0_proj_AND_lag_5 + mode_1_proj_OR_lag_5 + (1 + epoch_z + I(epoch_z^2) | run), lagged_learning_features_d)
+summary(lagged_model)
+```
+
+The benefits of analogy appear to be explained by these features! There's actually a *slowdown* when they are controlled for, probably due to the increased capacity relative to the computations in the none case...
 
 # What are the actual computations being performed
 
