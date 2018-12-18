@@ -14,10 +14,10 @@ nepochs = 100000
 termination_thresh = 0.01 # stop at this loss
 nruns = 500
 run_offset = 0
-num_hidden = 4
+num_hidden = 10 
 save_detailed = False # currently most useful for 3 layer, saves detailed info
                       # about the evolution of the penultimate weights and reps.
-save_summarized_detailed = True # same but saves a less ridiculous amount of data
+save_summarized_detailed = False # same but saves a less ridiculous amount of data
 ###################################
 nonlinearity_function = tf.nn.leaky_relu
 num_inputs_per = 2
@@ -74,7 +74,7 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                 target_ph = tf.placeholder(tf.float32, shape=[None, num_outputs])
 
 
-                Win = tf.Variable(tf.random_uniform([num_inputs,num_hidden],0.,0.5/(num_hidden+num_inputs)))
+                Win = tf.Variable(tf.random_uniform([num_inputs,num_hidden],0.,0.25/(num_hidden+num_inputs)))
                 bi = tf.Variable(tf.zeros([num_hidden]))
                 internal_rep = tf.matmul(input_ph, Win) + bi
                 hidden_weights = []
@@ -84,7 +84,7 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                 for layer_i in range(1, nlayer-1):
                     if layer_i == nlayer-2:
                         penultimate_rep = internal_rep
-                    W = tf.Variable(tf.random_normal([num_hidden,num_hidden],0.,0.5/num_hidden))
+                    W = tf.Variable(tf.random_normal([num_hidden,num_hidden],0.,0.25/num_hidden))
                     b = tf.Variable(tf.zeros([num_hidden]))
                     hidden_weights.append((W, b))
                     internal_rep = tf.matmul(internal_rep, W) + b
@@ -92,7 +92,7 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                         internal_rep = nonlinearity_function(internal_rep)
 
                 bo = tf.Variable(tf.zeros([num_outputs]))
-                Wout = tf.Variable(tf.random_uniform([num_hidden,num_outputs],0.,0.5/(num_hidden+num_outputs)))
+                Wout = tf.Variable(tf.random_uniform([num_hidden,num_outputs],0.,0.25/(num_hidden+num_outputs)))
                 pre_output = tf.matmul(internal_rep, Wout) + bo
 
                 if nonlinear:
