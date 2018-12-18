@@ -11,7 +11,7 @@ library(lmerTest)
 
 # load data
 ```{r}
-num_runs = 200
+num_runs = 500
 num_layerss = c(3)
 ```
 
@@ -19,15 +19,15 @@ num_layerss = c(3)
 d = data.frame()
 for (run_i in 0:(num_runs-1)) {
   for (num_layers in num_layerss) {
-    for (analogous in 0:1) {
+    for (analogous in 0:2) {
       for (nonlinear in c(1)) {
-        filename = sprintf("XOR_results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_loss_track.csv",
+        filename = sprintf("XOR_results_2/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_loss_track.csv",
                            num_layers, nonlinear, analogous, run_i)
         if (!file.exists(filename)) {
           next
         }
         this_d = read_csv(filename) %>%
-          mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:1, labels=c("non-analogous", "analogous")), num_layers=num_layers)
+          mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:2, labels=c("non-analogous", "analogous", "none")), num_layers=num_layers)
         d = bind_rows(d, this_d)
       }
     }
@@ -41,6 +41,10 @@ d = d %>%
   complete(run, analogous, nesting(nonlinear, num_layers, epoch), fill=list(MSE=0, d1_MSE=0)) 
 ```
 
+```{r}
+d = d %>%
+  mutate(analogous=factor(analogous, levels=c("none", "non-analogous", "analogous")))
+```
 
 # basic analysis
 ```{r}
@@ -49,7 +53,7 @@ theme_set(theme_bw() +
 ```
 
 ```{r}
-ggplot(data=d %>% filter(epoch < 10000), aes(x=epoch, y=d1_MSE, color=analogous)) +
+ggplot(data=d, aes(x=epoch, y=d1_MSE, color=analogous)) +
   geom_line(stat="summary", fun.y=median, size=1) +
   geom_line(aes(group=interaction(run, analogous)), alpha=0.1) +
   facet_wrap(.~nonlinear + num_layers, scales="free_x") +
@@ -85,6 +89,7 @@ learned_diff_d = learned_d %>%
 ```{r}
 ggplot(learned_d %>% filter(nonlinear, num_layers==3), aes(x=learned_epoch, color=analogous)) +
   geom_line(stat="density", adjust=1) +
+  scale_color_brewer(palette="Set1") +
   facet_grid(. ~ num_layers, scales="free")
 ```
 ```{r}
@@ -119,7 +124,7 @@ Since we know in the 3 layer case that the transfer effect **must** be happening
 ```{r}
 detailed_runs = 0:num_runs-1
 num_layers = 3
-early_epoch = 2500 # when "early" measurements will be made
+early_epoch = 5000 # when "early" measurements will be made
 ```
 
 ```{r message=FALSE}
@@ -127,27 +132,27 @@ simil_d = data.frame()
 sv_d = data.frame()
 proj_d = data.frame()
 for (run_i in detailed_runs) {
-  for (analogous in 0:1) {
+  for (analogous in 0:2) {
     for (nonlinear in c(1)) {
-      filename = sprintf("XOR_results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_penultimate_simil_track.csv",
+      filename = sprintf("XOR_results_2/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_penultimate_simil_track.csv",
                          num_layers, nonlinear, analogous, run_i)
       if (!file.exists(filename)) {
         next
       }
       this_d = read_csv(filename) %>%
-        mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:1, labels=c("non-analogous", "analogous")), num_layers=num_layers)
+        mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=c(2, 0, 1), labels=c("none", "non-analogous", "analogous")), num_layers=num_layers)
       simil_d = bind_rows(simil_d, this_d)
       
-      filename = sprintf("XOR_results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_penultimate_S_track.csv",
+      filename = sprintf("XOR_results_2/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_penultimate_S_track.csv",
                          num_layers, nonlinear, analogous, run_i)
       this_d = read_csv(filename) %>%
-        mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:1, labels=c("non-analogous", "analogous")), num_layers=num_layers)
+        mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=c(2, 0, 1), labels=c("none", "non-analogous", "analogous")), num_layers=num_layers)
       sv_d = bind_rows(sv_d, this_d)
 
-      filename = sprintf("XOR_results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_penultimate_proj_track.csv",
+      filename = sprintf("XOR_results_2/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_penultimate_proj_track.csv",
                          num_layers, nonlinear, analogous, run_i)
       this_d = read_csv(filename) %>%
-        mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:1, labels=c("non-analogous", "analogous")), num_layers=num_layers)
+        mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=c(2, 0, 1), labels=c("none", "non-analogous", "analogous")), num_layers=num_layers)
       proj_d = bind_rows(proj_d, this_d)
     }
   }
