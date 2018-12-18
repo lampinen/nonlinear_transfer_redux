@@ -122,9 +122,9 @@ Since we know in the 3 layer case that the transfer effect **must** be happening
 # Investigating how the penultimate layer weights change
 
 ```{r}
-detailed_runs = 0:num_runs-1
+detailed_runs = 0:49#num_runs-1
 num_layers = 3
-early_epoch = 5000 # when "early" measurements will be made
+early_epoch = 7500 # when "early" measurements will be made
 ```
 
 ```{r message=FALSE}
@@ -194,10 +194,11 @@ final_proj_d = part_summarized_proj_d %>%
 
 early_proj_d = part_summarized_proj_d %>%
   filter(epoch == early_epoch) %>%
-  select(-d1_abs_proj, -d2_abs_proj, -epoch) %>%
+  select(-d2_abs_proj, -epoch) %>%
   rename(early_abs_proj_diff=abs_proj_diff, early_proj_dot=proj_dot,
          early_abs_proj_dot=abs_proj_dot,
-         early_proj_AND=proj_AND, early_proj_OR=proj_OR)
+         early_proj_AND=proj_AND, early_proj_OR=proj_OR,
+         early_d1_abs_proj=d1_abs_proj)
   
 
 ```
@@ -370,7 +371,10 @@ ggplot(summarized_sv_d, aes(x=epoch, y=mean_S, color=analogous)) +
 learned_and_features_d = learned_d %>%
   filter(nonlinear, num_layers==3) %>%
   left_join(early_sv_d %>%
-              filter(mode_rank==0)) %>%
+              filter(mode_rank < 3) %>%
+              select(mode_rank, S, analogous, run) %>%
+              mutate(mode_rank = sprintf("mode_%i_S", mode_rank)) %>%
+              spread(mode_rank, S)) %>%
   left_join(final_simil_d %>% 
               select(-mean_abs_cosine) %>%
               mutate(type=paste("cosine_distance_", type, sep="")) %>%
@@ -391,17 +395,24 @@ learned_and_features_d = learned_d %>%
               rename(mode_1_proj_AND=proj_AND,
                      mode_1_proj_OR=proj_OR)) %>%
   left_join(early_proj_d %>%
-              filter(mode_rank==0))
+              filter(mode_rank==0) %>%
+              select(-d1_norm_proj)) %>%
+  left_join(early_proj_d %>%
+              filter(mode_rank==1) %>%             
+              select(analogous, run, early_proj_AND, early_proj_OR) %>%
+              rename(early_mode_1_proj_AND=early_proj_AND,
+                     early_mode_1_proj_OR=early_proj_OR)) %>%
+  filter(analogous != "non-analogous") # clearest comparison is none to analogous
 ```
 
 ```{r}
-model_non_analogous = lmer(learned_epoch ~ S + cosine_distance_between_analog + cosine_distance_between_nonanalog + abs_proj_diff + proj_AND + proj_OR + mode_1_proj_AND  + mode_1_proj_OR  + (1 | run), learned_and_features_d)
+model_non_analogous = lmer(learned_epoch ~ mode_0_S + mode_1_S  + early_proj_AND + early_mode_1_proj_OR  + (1 | run), learned_and_features_d)
 BIC(model_non_analogous)
 summary(model_non_analogous)
 ```
 
 ```{r}
-model = lmer(learned_epoch ~  S + cosine_distance_between_analog + cosine_distance_between_nonanalog +  (proj_AND  + proj_OR + mode_1_proj_AND + mode_1_proj_OR) * analogous  + (1 | run), learned_and_features_d)
+model = lmer(learned_epoch ~ mode_0_S + mode_1_S + early_proj_AND + early_mode_1_proj_OR + early_d1_abs_proj + analogous  + (1 | run), learned_and_features_d)
 BIC(model)
 summary(model)
 ```
@@ -416,47 +427,31 @@ summary(simple_model)
 proj_S = lmer(S ~ abs_proj_diff + (1 | run), learned_and_features_d)
 summary(proj_S)
 ```
-```{r}
-direct = lmer(learned_epoch ~ analogous + (1 | run), learned_and_features_d)
-BIC(direct)
-summary(direct)
-```
-
-Seems like the early increase in S is doing much of the work, but the other features are also important (based on BIC differences).
 
 ### actual mediation test
 
 ```{r}
-library(boot)
+#library(boot)
 ```
 
 ```{r}
-sobel_getter = function(data, indices) {
-  boot_data = data[indices,]
-  analogous_S = lmer(S ~ analogous + (1 | run), boot_data)
-  A = analogous_S@beta[2]
-  
-  S_learned = lmer(learned_epoch ~ S + (1 | run), boot_data)
-  B = S_learned@beta[2]
-  
-  return(A*B)
-}
+# sobel_getter = function(data, indices) {
+#   boot_data = data[indices,]
+#   analogous_S = lmer(S ~ analogous + (1 | run), boot_data)
+#   A = analogous_S@beta[2]
+# 
+#   S_learned = lmer(learned_epoch ~ S + (1 | run), boot_data)
+#   B = S_learned@beta[2]
+# 
+#   return(A*B)
+# }
 ```
 
 ```{r}
-set.seed(1)
-boot_results = boot(statistic=sobel_getter, data=learned_and_features_d, R=1000)
-boot.ci(boot_results)
+# set.seed(1)
+# boot_results = boot(statistic=sobel_getter, data=learned_and_features_d, R=1000)
+# boot.ci(boot_results)
 ```
-
-### is the early abs proj diff predictive of early S?
-
-```{r}
-early_proj_S = lm(S ~ early_abs_proj_diff, learned_and_features_d)
-summary(early_proj_S)
-```
-
-Yes.
 
 ### What about similarities?
 
@@ -501,6 +496,7 @@ learning_features_d = d %>%
               filter(mode_rank==0, epoch %% 200 == 0)) %>%
 #  group_by(run, analogous) %>%
   mutate(S_z = scale(S),
+         proj_AND_z = scale(proj_AND),
          norm_S_z = scale(norm_S),
          abs_proj_diff_z = scale(abs_proj_diff),
          log_abs_proj_dot_z = scale(log(abs_proj_dot)), 
@@ -592,7 +588,7 @@ predictivity_getter("y", "x_lag_1", dummy_d_lagged)
 generate_lagged_predictivity_plots(c("y","x"), 0:2, c("run"), dummy_d)
 ```
 ```{r}
-vars_of_interest = c("d1_MSE_z", "S_z", "log_abs_proj_dot_z", "cosine_distance_between_analog_z", "cosine_distance_between_nonanalog_z", "cosine_distance_within_d1_z")
+vars_of_interest = c("d1_MSE_z", "S_z", "proj_AND_z")
 grouping_vars = c("run", "analogous")
 lags = 0:10
 
