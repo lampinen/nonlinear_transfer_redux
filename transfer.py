@@ -10,9 +10,9 @@ from orthogonal_matrices import random_orthogonal
 init_eta = 0.005
 eta_decay = 1.0 #multiplicative per eta_decay_epoch epochs
 eta_decay_epoch = 10
-nepochs = 200000
+nepochs = 100000
 termination_thresh = 0.01 # stop at this loss
-nruns = 500
+nruns = 100
 run_offset = 0
 num_hidden = 10 
 save_detailed = False # currently most useful for 3 layer, saves detailed info
@@ -20,27 +20,30 @@ save_detailed = False # currently most useful for 3 layer, saves detailed info
 save_summarized_detailed = True # same but saves a less ridiculous amount of data
 ###################################
 nonlinearity_function = tf.nn.leaky_relu
+num_inputs_per = 2
+num_outputs_per = 1
 
-eight_things_data = np.loadtxt("AllEightB.txt", dtype=np.float32)[:8, :]
-print(eight_things_data.shape)
-num_inputs_per, num_outputs_per = eight_things_data.shape
+binary_x_data = np.array([[0,0],
+                          [0,1],
+                          [1,0],
+                          [1,1]])
 
-# now create a scrambled version with output unit variance preserved.
-np.random.seed(1)
-scramble_cols = np.concatenate([i*np.ones(num_inputs_per, dtype=np.int) for i in range(num_outputs_per)])
-scramble_rows = np.concatenate([np.random.permutation(num_inputs_per) for i in range(num_outputs_per)])
-scrambled_eight_things_data = eight_things_data[scramble_rows, scramble_cols].reshape([num_inputs_per, num_outputs_per], order='F') 
-print(scrambled_eight_things_data)
+x_data = block_diag(binary_x_data, binary_x_data)
 
-print(np.sum(eight_things_data, axis=0))
-print(np.sum(scrambled_eight_things_data, axis=0))
-x_data = np.eye(2*num_inputs_per) 
-print(x_data)
+XOR_data = np.array([[0],
+                     [1],
+                     [1],
+                     [0]])
 
-y_data = block_diag(eight_things_data, eight_things_data)
-y_data_no = block_diag(eight_things_data, scrambled_eight_things_data)
+AND_data = np.array([[0],
+                     [0],
+                     [0],
+                     [1]])
 
-y_datasets = [y_data, y_data_no]
+y_data = block_diag(XOR_data, XOR_data)
+y_data_no = block_diag(XOR_data, AND_data)
+
+y_datasets = [y_data_no, y_data, y_data_no] # for the third case, just won't train
 
 print(y_data)
 print(y_data_no)
@@ -50,26 +53,28 @@ np.savetxt("analogy_data.csv", y_data, delimiter=',')
 
 num_inputs = 2*num_inputs_per
 num_outputs = 2*num_outputs_per
+num_examples_per = len(binary_x_data)
+num_examples = len(x_data)
+
 
 for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
     for nonlinear in [True]:
         for nlayer in [3]: #[3]: #
-            for analogous in [0, 1]:
+            for analogous in [1, 0, 2]:
                 num_hidden = num_hidden
                 print "nlayer %i nonlinear %i analogous %i run %i" % (nlayer, nonlinear, analogous, rseed)
-                filename_prefix = "eight_things_results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_" %(nlayer,nonlinear,analogous,rseed)
+                filename_prefix = "XOR_results_2/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_" %(nlayer,nonlinear,analogous,rseed)
 
                 np.random.seed(rseed)
                 tf.set_random_seed(rseed)
                 this_x_data = x_data
                 this_y_data = y_datasets[analogous] 
-                print(this_y_data)
 
                 input_ph = tf.placeholder(tf.float32, shape=[None, num_inputs])
                 target_ph = tf.placeholder(tf.float32, shape=[None, num_outputs])
 
 
-                Win = tf.Variable(tf.random_uniform([num_inputs,num_hidden],0.,0.5/(num_hidden+num_inputs)))
+                Win = tf.Variable(tf.random_uniform([num_inputs,num_hidden],0.,0.25/(num_hidden+num_inputs)))
                 bi = tf.Variable(tf.zeros([num_hidden]))
                 internal_rep = tf.matmul(input_ph, Win) + bi
                 hidden_weights = []
@@ -79,7 +84,7 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                 for layer_i in range(1, nlayer-1):
                     if layer_i == nlayer-2:
                         penultimate_rep = internal_rep
-                    W = tf.Variable(tf.random_normal([num_hidden,num_hidden],0.,0.5/num_hidden))
+                    W = tf.Variable(tf.random_normal([num_hidden,num_hidden],0.,0.25/num_hidden))
                     b = tf.Variable(tf.zeros([num_hidden]))
                     hidden_weights.append((W, b))
                     internal_rep = tf.matmul(internal_rep, W) + b
@@ -87,7 +92,7 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                         internal_rep = nonlinearity_function(internal_rep)
 
                 bo = tf.Variable(tf.zeros([num_outputs]))
-                Wout = tf.Variable(tf.random_uniform([num_hidden,num_outputs],0.,0.5/(num_hidden+num_outputs)))
+                Wout = tf.Variable(tf.random_uniform([num_hidden,num_outputs],0.,0.25/(num_hidden+num_outputs)))
                 pre_output = tf.matmul(internal_rep, Wout) + bo
 
                 if nonlinear:
@@ -95,13 +100,16 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                 else:
                     output = pre_output
 
-                d1_loss = tf.reduce_sum(tf.square(output[:8, :34] - target_ph[:8, :34]))
-                d2_loss = tf.reduce_sum(tf.square(output[8:, 34:] - target_ph[8, 34:]))
-                loss =  d1_loss + d2_loss
+                d1_loss = tf.reduce_sum(tf.square(output[:num_examples_per, :num_outputs_per] - target_ph[:num_examples_per, :num_outputs_per]))
+                d2_loss = tf.reduce_sum(tf.square(output[num_examples_per:, num_outputs_per:] - target_ph[num_examples_per:, num_outputs_per:]))
+                loss = d1_loss + d2_loss
                 output_grad = tf.gradients(loss,[output])[0]
                 eta_ph = tf.placeholder(tf.float32)
                 optimizer = tf.train.GradientDescentOptimizer(eta_ph)
-                train = optimizer.minimize(loss)
+                if analogous < 2:
+                    train = optimizer.minimize(loss)
+                else:
+                    train = optimizer.minimize(d1_loss) # only train on one task
 
                 init = tf.global_variables_initializer()
 
@@ -111,11 +119,11 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                 def test_accuracy():
                     MSE = sess.run(loss,
                                    feed_dict={input_ph: this_x_data,target_ph: this_y_data})
-                    MSE /= num_inputs 
+                    MSE /= num_examples 
 
                     d1_MSE = sess.run(d1_loss,
-                                      feed_dict={input_ph: this_x_data,target_ph: this_y_data})
-                    d1_MSE /= num_inputs_per 
+                                   feed_dict={input_ph: this_x_data,target_ph: this_y_data})
+                    d1_MSE /= num_examples_per 
                     return MSE, d1_MSE
 
 
@@ -169,14 +177,14 @@ for rseed in xrange(run_offset, run_offset + nruns):#[66, 80, 104, 107]: #
                     reps /= np.sqrt(np.sum(np.square(reps), axis=-1, keepdims=True))
                     projs = np.matmul(reps, U)
                     sout, svout, pout = outfiles
-                    for i in range(num_inputs-1):
-                        for j in range(i+1, num_inputs):
+                    for i in range(num_examples-1):
+                        for j in range(i+1, num_examples):
                             sout.write("%i, %i, %i, %f\n" % (epoch, i, j, simils[i, j]))
 
                     for i in range(len(S)):
                         svout.write("%i, %i, %f\n" % (epoch, i, S[i]))
 
-                    for i in range(num_inputs):
+                    for i in range(num_examples):
                         for j in range(num_hidden):
                             pout.write("%i, %i, %i, %f\n" % (epoch, i, j, projs[i, j]))
 

@@ -19,15 +19,15 @@ num_layerss = c(3)
 d = data.frame()
 for (run_i in 0:(num_runs-1)) {
   for (num_layers in num_layerss) {
-    for (analogous in 0:1) {
+    for (analogous in 0:2) {
       for (nonlinear in c(1)) {
-        filename = sprintf("eight_things_results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_loss_track.csv",
+        filename = sprintf("XOR_results_2/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_loss_track.csv",
                            num_layers, nonlinear, analogous, run_i)
         if (!file.exists(filename)) {
           next
         }
         this_d = read_csv(filename) %>%
-          mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:1, labels=c("non-analogous", "analogous")), num_layers=num_layers)
+          mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:2, labels=c("non-analogous", "analogous", "none")), num_layers=num_layers)
         d = bind_rows(d, this_d)
       }
     }
@@ -41,6 +41,10 @@ d = d %>%
   complete(run, analogous, nesting(nonlinear, num_layers, epoch), fill=list(MSE=0, d1_MSE=0)) 
 ```
 
+```{r}
+d = d %>%
+  mutate(analogous=factor(analogous, levels=c("none", "non-analogous", "analogous")))
+```
 
 # basic analysis
 ```{r}
@@ -51,14 +55,14 @@ theme_set(theme_bw() +
 ```{r}
 ggplot(data=d, aes(x=epoch, y=d1_MSE, color=analogous)) +
   geom_line(stat="summary", fun.y=median, size=1) +
-  geom_line(aes(group=interaction(run, analogous)), alpha=0.1) +
+#  geom_line(aes(group=interaction(run, analogous)), alpha=0.1) +
   facet_wrap(.~nonlinear + num_layers, scales="free_x") +
   labs(y="Loss (L2)") +
   scale_color_brewer(palette="Set1")
 ```
 
 ```{r}
-ggsave("plots/eight_things_transfer_comparison.png", width=8, height=4)
+ggsave("plots/XOR_transfer_comparison.png", width=8, height=4)
 ```
 
 ```{r}
@@ -85,10 +89,11 @@ learned_diff_d = learned_d %>%
 ```{r}
 ggplot(learned_d %>% filter(nonlinear, num_layers==3), aes(x=learned_epoch, color=analogous)) +
   geom_line(stat="density", adjust=1) +
+  scale_color_brewer(palette="Set1") +
   facet_grid(. ~ num_layers, scales="free")
 ```
 ```{r}
-ggsave("plots/et_transfer_stopping_times.png", width=8, height=4)
+ggsave("plots/XOR_transfer_stopping_times.png", width=8, height=4)
 ```
 
 
@@ -100,7 +105,7 @@ ggplot(learned_diff_d %>% filter(nonlinear, num_layers==3), aes(x=learn_diff)) +
 ```
 
 ```{r}
-ggsave("plots/et_transfer_stopping_time_differences.png", width=8, height=4)
+ggsave("plots/XOR_transfer_stopping_time_differences.png", width=8, height=4)
 ```
 
 
@@ -112,40 +117,14 @@ tail(sorted_diff_d)
 
 ```
 
-```{r}
-ggplot(data=d %>% filter(run %in% c(80, 104, 107), num_layers==3, nonlinear), aes(x=epoch, y=d1_MSE, color=analogous)) +
-  geom_line(aes(group=interaction(run, analogous))) +
-  labs(y="Loss (L2)") +
-  scale_color_brewer(palette="Set1")
-```
-
 Since we know in the 3 layer case that the transfer effect **must** be happening at the middle layer, since these are the only shared weights. This provides a nice target for analysis.
-
-## why are some 4-layer linear runs showing effects in the other direction?
-
-
-```{r}
-ggplot(data=d %>% filter(run %in% c(98), num_layers==4, !nonlinear), aes(x=epoch, y=d1_MSE, color=analogous)) +
-  geom_line(aes(group=interaction(run, analogous))) +
-  labs(y="Loss (L2)") +
-  scale_color_brewer(palette="Set1")
-```
-
-```{r}
-ggplot(data=d %>% filter(run %in% c(98), num_layers==4, !nonlinear), aes(x=epoch, y=MSE, color=analogous)) +
-  geom_line(aes(group=interaction(run, analogous))) +
-  labs(y="Loss (L2)") +
-  scale_color_brewer(palette="Set1")
-```
-
-Might just be single-domain weirdness and the exaggeration that happens with depth... Should investigate further.
-
 
 # Investigating how the penultimate layer weights change
 
 ```{r}
-detailed_runs = 0:499
+detailed_runs = 0:99#num_runs-1
 num_layers = 3
+early_epoch = 7500 # when "early" measurements will be made
 ```
 
 ```{r message=FALSE}
@@ -153,27 +132,27 @@ simil_d = data.frame()
 sv_d = data.frame()
 proj_d = data.frame()
 for (run_i in detailed_runs) {
-  for (analogous in 0:1) {
+  for (analogous in 0:2) {
     for (nonlinear in c(1)) {
-      filename = sprintf("results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_penultimate_simil_track.csv",
+      filename = sprintf("XOR_results_2/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_penultimate_simil_track.csv",
                          num_layers, nonlinear, analogous, run_i)
       if (!file.exists(filename)) {
         next
       }
       this_d = read_csv(filename) %>%
-        mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:1, labels=c("non-analogous", "analogous")), num_layers=num_layers)
+        mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=c(2, 0, 1), labels=c("none", "non-analogous", "analogous")), num_layers=num_layers)
       simil_d = bind_rows(simil_d, this_d)
       
-      filename = sprintf("results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_penultimate_S_track.csv",
+      filename = sprintf("XOR_results_2/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_penultimate_S_track.csv",
                          num_layers, nonlinear, analogous, run_i)
       this_d = read_csv(filename) %>%
-        mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:1, labels=c("non-analogous", "analogous")), num_layers=num_layers)
+        mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=c(2, 0, 1), labels=c("none", "non-analogous", "analogous")), num_layers=num_layers)
       sv_d = bind_rows(sv_d, this_d)
 
-      filename = sprintf("results/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_penultimate_proj_track.csv",
+      filename = sprintf("XOR_results_2/nlayer_%i_nonlinear_%i_analogous_%i_rseed_%i_penultimate_proj_track.csv",
                          num_layers, nonlinear, analogous, run_i)
       this_d = read_csv(filename) %>%
-        mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=0:1, labels=c("non-analogous", "analogous")), num_layers=num_layers)
+        mutate(run=run_i, nonlinear=nonlinear==1, analogous=factor(analogous, levels=c(2, 0, 1), labels=c("none", "non-analogous", "analogous")), num_layers=num_layers)
       proj_d = bind_rows(proj_d, this_d)
     }
   }
@@ -190,10 +169,13 @@ part_summarized_proj_d = proj_d %>%
   unite(type_and_index, measurement, rep_i) %>%
   spread(type_and_index, value) %>%
   group_by(run, analogous, epoch, mode_rank) %>%
-  summarize(d1_abs_proj = abs_proj_0 + abs_proj_1 + abs_proj_2,
-            d2_abs_proj = abs_proj_3 + abs_proj_4 + abs_proj_5,
-            abs_proj_diff = abs(d1_abs_proj - d2_abs_proj),# how much is the mode biased towards one domain?
-            proj_dot = projection_0 * projection_3 + projection_1 * projection_4 + projection_2 * projection_5, # an un-normalized inner product
+  summarize(d1_abs_proj = abs_proj_0 + abs_proj_1 + abs_proj_2 + abs_proj_3,
+            d2_abs_proj = abs_proj_4 + abs_proj_5 + abs_proj_6 + abs_proj_7,
+            d1_norm_proj = sqrt(sum(c(projection_0, projection_1, projection_2, projection_3)^2)), 
+            abs_proj_diff = abs(d1_abs_proj - d2_abs_proj) ,# how much is the mode biased towards one domain?
+            proj_dot = projection_0 * projection_4 + projection_1 * projection_5 + projection_2 * projection_6 + projection_3 * projection_7, # an un-normalized inner product, ignores other analogies
+            proj_AND = abs(drop(c(projection_0, projection_1, projection_2, projection_3) %*% c(-1, -1, -1, 1)))/(2*d1_norm_proj),
+            proj_OR = abs(drop(c(projection_0, projection_1, projection_2, projection_3) %*% c(-1, 1, 1, 1)))/(2*d1_norm_proj),
             abs_proj_dot = abs(proj_dot)) %>% 
   ungroup() 
 
@@ -201,6 +183,8 @@ summarized_proj_d = part_summarized_proj_d %>%
   group_by(analogous, epoch, mode_rank) %>%
   summarize(mean_abs_proj_diff = mean(abs_proj_diff), sd_abs_proj_diff = sd(abs_proj_diff),
             mean_proj_dot = mean(proj_dot),
+            mean_proj_AND = mean(proj_AND),
+            mean_proj_OR = mean(proj_OR),
             mean_abs_proj_dot = mean(abs_proj_dot))
 
 final_proj_d = part_summarized_proj_d %>%
@@ -209,10 +193,12 @@ final_proj_d = part_summarized_proj_d %>%
   ungroup()
 
 early_proj_d = part_summarized_proj_d %>%
-  filter(epoch == 5000) %>%
-  select(-d1_abs_proj, -d2_abs_proj, -epoch) %>%
+  filter(epoch == early_epoch) %>%
+  select(-d2_abs_proj, -epoch) %>%
   rename(early_abs_proj_diff=abs_proj_diff, early_proj_dot=proj_dot,
-         early_abs_proj_dot=abs_proj_dot)
+         early_abs_proj_dot=abs_proj_dot,
+         early_proj_AND=proj_AND, early_proj_OR=proj_OR,
+         early_d1_abs_proj=d1_abs_proj)
   
 
 ```
@@ -225,19 +211,48 @@ ggplot(summarized_proj_d %>% filter(mode_rank < 2), aes(x=epoch, y=mean_abs_proj
 ```
 
 ```{r}
-ggplot(final_proj_d, aes(x=abs_proj_diff, color=analogous)) +
+ggplot(final_proj_d, aes(x=log(abs_proj_diff), color=analogous)) +
   geom_density() +
   scale_color_brewer(palette="Set1") +
   facet_grid(~mode_rank)
 ```
 
 ```{r}
-ggplot(summarized_proj_d %>% filter(mode_rank < 2), aes(x=epoch, y=mean_proj_dot, color=analogous)) +
+ggplot(final_proj_d %>%
+         filter(mode_rank < 2), aes(x=log(proj_AND), color=analogous)) +
+  geom_density() +
+  scale_color_brewer(palette="Set1") +
+  facet_grid(~mode_rank)
+```
+
+```{r}
+ggplot(final_proj_d %>%
+         filter(mode_rank < 2), aes(x=log(proj_OR), color=analogous)) +
+  geom_density() +
+  scale_color_brewer(palette="Set1") +
+  facet_grid(~mode_rank)
+```
+
+```{r}
+ggplot(summarized_proj_d %>% filter(mode_rank < 5), aes(x=epoch, y=mean_proj_dot, color=analogous)) +
   geom_line() +
   scale_color_brewer(palette="Set1") +
   facet_grid(~mode_rank)
 ```
 
+```{r}
+ggplot(summarized_proj_d %>% filter(mode_rank < 4), aes(x=epoch, y=mean_proj_AND, color=analogous)) +
+  geom_line() +
+  scale_color_brewer(palette="Set1") +
+  facet_grid(~mode_rank)
+```
+
+```{r}
+ggplot(summarized_proj_d %>% filter(mode_rank < 4), aes(x=epoch, y=mean_proj_OR, color=analogous)) +
+  geom_line() +
+  scale_color_brewer(palette="Set1") +
+  facet_grid(~mode_rank)
+```
 
 ```{r}
 ggplot(summarized_proj_d %>% filter(mode_rank < 2), aes(x=epoch, y=log(mean_abs_proj_dot), color=analogous)) +
@@ -279,7 +294,7 @@ final_simil_d = part_summarized_simil_d %>%
 
 early_simil_d = part_summarized_simil_d %>%
   group_by(run, analogous, type) %>%
-  filter(epoch == 5000) %>%
+  filter(epoch == early_epoch) %>%
   ungroup() %>%
   select(-epoch)
 
@@ -325,7 +340,7 @@ final_sv_d = sv_d %>%
 
 early_sv_d = sv_d %>%
   group_by(analogous, run, mode_rank) %>% 
-  filter(epoch == 5000) %>%
+  filter(epoch == early_epoch) %>%
   select(-epoch) %>%
   ungroup()
 ```
@@ -356,7 +371,10 @@ ggplot(summarized_sv_d, aes(x=epoch, y=mean_S, color=analogous)) +
 learned_and_features_d = learned_d %>%
   filter(nonlinear, num_layers==3) %>%
   left_join(early_sv_d %>%
-              filter(mode_rank==0)) %>%
+              filter(mode_rank < 3) %>%
+              select(mode_rank, S, analogous, run) %>%
+              mutate(mode_rank = sprintf("mode_%i_S", mode_rank)) %>%
+              spread(mode_rank, S)) %>%
   left_join(final_simil_d %>% 
               select(-mean_abs_cosine) %>%
               mutate(type=paste("cosine_distance_", type, sep="")) %>%
@@ -371,24 +389,36 @@ learned_and_features_d = learned_d %>%
               spread(type, mean_cosine_distance)) %>%
   left_join(final_proj_d %>%
               filter(mode_rank==0)) %>%
+  left_join(final_proj_d %>%
+              filter(mode_rank==1) %>%
+              select(analogous, run, epoch, proj_AND, proj_OR) %>%
+              rename(mode_1_proj_AND=proj_AND,
+                     mode_1_proj_OR=proj_OR)) %>%
   left_join(early_proj_d %>%
-              filter(mode_rank==0))
+              filter(mode_rank==0) %>%
+              select(-d1_norm_proj)) %>%
+  left_join(early_proj_d %>%
+              filter(mode_rank==1) %>%             
+              select(analogous, run, early_proj_AND, early_proj_OR) %>%
+              rename(early_mode_1_proj_AND=early_proj_AND,
+                     early_mode_1_proj_OR=early_proj_OR)) %>%
+  filter(analogous != "non-analogous") # clearest comparison is none to analogous
 ```
 
 ```{r}
-model_non_analogous = lmer(learned_epoch ~ S + cosine_distance_between_analog + cosine_distance_between_nonanalog + abs_proj_diff + (1 | run), learned_and_features_d)
+model_non_analogous = lmer(learned_epoch ~ mode_0_S + mode_1_S  + early_proj_AND + early_mode_1_proj_OR  + (1 | run), learned_and_features_d)
 BIC(model_non_analogous)
 summary(model_non_analogous)
 ```
 
 ```{r}
-model = lmer(learned_epoch ~ analogous + S + cosine_distance_between_analog + cosine_distance_between_nonanalog + abs_proj_diff + (1 | run), learned_and_features_d)
+model = lmer(learned_epoch ~ mode_0_S + mode_1_S + early_proj_AND + early_mode_1_proj_OR + analogous  + (1 | run), learned_and_features_d)
 BIC(model)
 summary(model)
 ```
 
 ```{r}
-simple_model = lmer(learned_epoch ~ analogous + S + (1 | run), learned_and_features_d)
+simple_model = lmer(learned_epoch ~ analogous + (1 | run), learned_and_features_d)
 BIC(simple_model)
 summary(simple_model)
 ```
@@ -397,47 +427,31 @@ summary(simple_model)
 proj_S = lmer(S ~ abs_proj_diff + (1 | run), learned_and_features_d)
 summary(proj_S)
 ```
-```{r}
-direct = lmer(learned_epoch ~ analogous + (1 | run), learned_and_features_d)
-BIC(direct)
-summary(direct)
-```
-
-Seems like the early increase in S is doing much of the work, but the other features are also important (based on BIC differences).
 
 ### actual mediation test
 
 ```{r}
-library(boot)
+#library(boot)
 ```
 
 ```{r}
-sobel_getter = function(data, indices) {
-  boot_data = data[indices,]
-  analogous_S = lmer(S ~ analogous + (1 | run), boot_data)
-  A = analogous_S@beta[2]
-  
-  S_learned = lmer(learned_epoch ~ S + (1 | run), boot_data)
-  B = S_learned@beta[2]
-  
-  return(A*B)
-}
+# sobel_getter = function(data, indices) {
+#   boot_data = data[indices,]
+#   analogous_S = lmer(S ~ analogous + (1 | run), boot_data)
+#   A = analogous_S@beta[2]
+# 
+#   S_learned = lmer(learned_epoch ~ S + (1 | run), boot_data)
+#   B = S_learned@beta[2]
+# 
+#   return(A*B)
+# }
 ```
 
 ```{r}
-set.seed(1)
-boot_results = boot(statistic=sobel_getter, data=learned_and_features_d, R=1000)
-boot.ci(boot_results)
+# set.seed(1)
+# boot_results = boot(statistic=sobel_getter, data=learned_and_features_d, R=1000)
+# boot.ci(boot_results)
 ```
-
-### is the early abs proj diff predictive of early S?
-
-```{r}
-early_proj_S = lm(S ~ early_abs_proj_diff, learned_and_features_d)
-summary(early_proj_S)
-```
-
-No.
 
 ### What about similarities?
 
@@ -469,22 +483,30 @@ summary(analogy_S)
 
 ```{r}
 learning_features_d = d %>%
-  filter(nonlinear, num_layers==3, epoch %% 500 == 0) %>%
+  filter(nonlinear, num_layers==3, epoch %% 200 == 0) %>%
   left_join(sv_d %>%
-              filter(mode_rank==0, epoch %% 500 == 0)) %>%
-  filter(!is.na(S)) %>% # the other datasets haven't been completed/we don't want the predictivity estimates to be skewed.
+              filter(mode_rank < 3, epoch %% 200 == 0) %>%
+              select(mode_rank, S, analogous, epoch, run) %>%
+              mutate(mode_rank = sprintf("mode_%i_S", mode_rank)) %>%
+              spread(mode_rank, S)) %>%
+  filter(!is.na(mode_0_S)) %>% # the other datasets haven't been completed/we don't want the predictivity estimates to be skewed.
   left_join(part_summarized_simil_d %>% 
-              filter(epoch %% 500 == 0) %>%
+              filter(epoch %% 200 == 0) %>%
               select(-mean_abs_cosine) %>%
               mutate(type=paste("cosine_distance_", type, sep="")) %>%
               spread(type, mean_cosine_distance)) %>%
   left_join(part_summarized_proj_d %>%
-              filter(mode_rank==0, epoch %% 500 == 0)) %>%
+              filter(mode_rank < 2, epoch %% 200 == 0) %>%
+              select(run, analogous, epoch, mode_rank, d1_abs_proj, abs_proj_diff, proj_AND, proj_OR) %>%
+              gather(measurement, value, contains("proj")) %>%
+              mutate(mode_and_measure=sprintf("mode_%i_%s", mode_rank, measurement)) %>%
+              select(-measurement, -mode_rank) %>%
+              spread(mode_and_measure, value)) %>%
 #  group_by(run, analogous) %>%
-  mutate(S_z = scale(S),
-         norm_S_z = scale(norm_S),
-         abs_proj_diff_z = scale(abs_proj_diff),
-         log_abs_proj_dot_z = scale(log(abs_proj_dot)), 
+  mutate(mode_0_S_z = scale(mode_0_S),
+         mode_1_S_z = scale(mode_1_S),
+         mode_0_proj_AND_z = scale(mode_0_proj_AND),
+         mode_1_proj_OR_z = scale(mode_1_proj_OR),
          cosine_distance_between_analog_z = scale(cosine_distance_between_analog),
          cosine_distance_between_nonanalog_z = scale(cosine_distance_between_nonanalog),
          cosine_distance_within_d1_z = scale(cosine_distance_within_d1),
@@ -573,17 +595,83 @@ predictivity_getter("y", "x_lag_1", dummy_d_lagged)
 generate_lagged_predictivity_plots(c("y","x"), 0:2, c("run"), dummy_d)
 ```
 ```{r}
-vars_of_interest = c("d1_MSE_z", "S_z", "log_abs_proj_dot_z", "cosine_distance_between_analog_z", "cosine_distance_between_nonanalog_z", "cosine_distance_within_d1_z")
+vars_of_interest = c("d1_MSE_z", "mode_0_S_z", "mode_1_S_z", "mode_0_proj_AND_z", "mode_1_proj_OR_z")
 grouping_vars = c("run", "analogous")
 lags = 0:10
 
 p = generate_lagged_predictivity_plots(vars_of_interest, lags, grouping_vars, learning_features_d)
 p + 
-  labs(x="Lag (*500 epochs)", y="Correlation")
+  labs(x="Lag (*200 epochs)", y="Correlation")
 ```
+
 ```{r}
-ggsave("plots/time_correlation_predictivity.png", width=12, height=9)
+ggsave("plots/XOR_time_correlation_predictivity.png", width=12, height=9)
 ```
 
+## lets actually model
 
+```{r}
+lagged_learning_features_d = lag_vars(c("d1_MSE", "mode_0_S", "mode_1_S", "mode_0_proj_AND", "mode_1_proj_OR"), lags, grouping_vars, learning_features_d %>%
+                                        filter(analogous != "non-analogous")) %>%
+  mutate(epoch_z = scale(epoch))
+```
 
+Note that the below models fit the time-courses like crap, instead of polynomials in time should have mixture of decaying logistic functions or something.
+
+```{r}
+simple_model = lmer(d1_MSE ~ analogous + epoch_z + I(epoch_z^2) + I(epoch_z^3) + (1 + epoch_z + I(epoch_z^2)  + I(epoch_z^3)| run), lagged_learning_features_d)
+summary(simple_model)
+```
+
+```{r}
+lagged_model = lmer(d1_MSE ~ analogous + epoch_z + I(epoch_z^2)  + I(epoch_z^3)+ mode_0_S_lag_5 + mode_1_S_lag_5 + mode_0_proj_AND_lag_5 + mode_1_proj_OR_lag_5 + (1 + epoch_z + I(epoch_z^2) + I(epoch_z^3) | run), lagged_learning_features_d)
+summary(lagged_model)
+```
+
+The benefits of analogy appear to be explained by these features! There's actually a (small) *slowdown* when they are controlled for, probably due to the increased capacity relative to the computations in the none case...
+
+## comparing to non-analogous
+
+```{r}
+lagged_learning_features_d = lag_vars(c("d1_MSE", "mode_0_S", "mode_1_S", "mode_0_proj_AND", "mode_1_proj_OR"), lags, grouping_vars, learning_features_d %>%
+                                        filter(analogous != "none")) %>%
+  mutate(epoch_z = scale(epoch))
+```
+
+```{r}
+simple_model = lmer(d1_MSE ~ analogous + epoch_z + I(epoch_z^2) + I(epoch_z^3) + (1 + epoch_z + I(epoch_z^2) | run), lagged_learning_features_d)
+summary(simple_model)
+```
+
+```{r}
+lagged_model = lmer(d1_MSE ~ analogous + epoch_z + I(epoch_z^2)  + I(epoch_z^3)+ mode_0_S_lag_5 + mode_1_S_lag_5 + mode_0_proj_AND_lag_5 + mode_1_proj_OR_lag_5 + (1 + epoch_z + I(epoch_z^2)| run), lagged_learning_features_d)
+summary(lagged_model)
+```
+
+# What are the actual computations being performed
+
+```{r}
+ggplot(data=simil_d %>%
+         group_by(analogous, run) %>%
+         filter(epoch == max(epoch)) %>%
+         ungroup() %>%
+         group_by(analogous, rep_i, rep_j) %>%
+         summarize(mean_cosine_similarity=mean(cosine_similarity))) +
+  geom_raster(aes(x=rep_i, y=rep_j, fill=mean_cosine_similarity)) +
+  geom_raster(aes(x=rep_j, y=rep_i, fill=mean_cosine_similarity)) +
+  facet_wrap(~analogous)
+```
+
+```{r}
+ggplot(data=proj_d %>%
+         filter(run < 4,
+                mode_j < 5) %>% # probably most the important computation is done in the first few modes?
+         group_by(analogous, run) %>%
+         filter(epoch == max(epoch)),
+       aes(x=rep_i, y=mode_j, fill=projection)) +
+  geom_raster() +
+  scale_y_discrete(breaks=0:9) +
+  facet_grid(run~analogous)
+```
+
+(Hard to summarize mode projections because taking the absolute value ignores important information, and even if we use better heuristics like ensuring the projection on the first item has the same sign, the computations being done are different enough that it seems worth keeping them separate.)
