@@ -12,12 +12,12 @@ eta_decay = 1.0 #multiplicative per eta_decay_epoch epochs
 eta_decay_epoch = 10
 nepochs = 100000
 termination_thresh = 0.01 # stop at this loss
-nruns = 500
+nruns = 100
 run_offset = 0
 num_hidden = 10 
 save_detailed = False # currently most useful for 3 layer, saves detailed info
                       # about the evolution of the penultimate weights and reps.
-save_summarized_detailed = False # same but saves a less ridiculous amount of data
+save_summarized_detailed = True # same but saves a less ridiculous amount of data
 ###################################
 nonlinearity_function = tf.nn.leaky_relu
 num_inputs_per = 2
