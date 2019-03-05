@@ -55,7 +55,7 @@ theme_set(theme_bw() +
 ```{r}
 ggplot(data=d, aes(x=epoch, y=d1_MSE, color=analogous)) +
   geom_line(stat="summary", fun.y=median, size=1) +
-  geom_line(aes(group=interaction(run, analogous)), alpha=0.1) +
+#  geom_line(aes(group=interaction(run, analogous)), alpha=0.1) +
   facet_wrap(.~nonlinear + num_layers, scales="free_x") +
   labs(y="Loss (L2)") +
   scale_color_brewer(palette="Set1")
@@ -122,7 +122,7 @@ Since we know in the 3 layer case that the transfer effect **must** be happening
 # Investigating how the penultimate layer weights change
 
 ```{r}
-detailed_runs = 0:49#num_runs-1
+detailed_runs = 0:99#num_runs-1
 num_layers = 3
 early_epoch = 7500 # when "early" measurements will be made
 ```
@@ -629,6 +629,24 @@ summary(lagged_model)
 ```
 
 The benefits of analogy appear to be explained by these features! There's actually a (small) *slowdown* when they are controlled for, probably due to the increased capacity relative to the computations in the none case...
+
+## comparing to non-analogous
+
+```{r}
+lagged_learning_features_d = lag_vars(c("d1_MSE", "mode_0_S", "mode_1_S", "mode_0_proj_AND", "mode_1_proj_OR"), lags, grouping_vars, learning_features_d %>%
+                                        filter(analogous != "none")) %>%
+  mutate(epoch_z = scale(epoch))
+```
+
+```{r}
+simple_model = lmer(d1_MSE ~ analogous + epoch_z + I(epoch_z^2) + I(epoch_z^3) + (1 + epoch_z + I(epoch_z^2) | run), lagged_learning_features_d)
+summary(simple_model)
+```
+
+```{r}
+lagged_model = lmer(d1_MSE ~ analogous + epoch_z + I(epoch_z^2)  + I(epoch_z^3)+ mode_0_S_lag_5 + mode_1_S_lag_5 + mode_0_proj_AND_lag_5 + mode_1_proj_OR_lag_5 + (1 + epoch_z + I(epoch_z^2)| run), lagged_learning_features_d)
+summary(lagged_model)
+```
 
 # What are the actual computations being performed
 
